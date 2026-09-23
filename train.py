@@ -35,6 +35,8 @@ def main() -> None:
     parser.add_argument("--rollouts", type=int, default=64, help="rollouts per candidate action (m)")
     parser.add_argument("--horizon", type=int, default=360, help="rollout length in periods (60 days)")
     parser.add_argument("--generations", type=int, default=1)
+    parser.add_argument("--loss", choices=["ce", "soft_ce", "count_ce"], default="ce",
+                        help="ce = the winning action; soft_ce = near-ties get near-equal targets")
     parser.add_argument("--out", default=os.path.join("agents", "trained"))
     args = parser.parse_args()
 
@@ -44,7 +46,7 @@ def main() -> None:
         mdp, base, features=SparePartsFeaturizer,
         n=args.samples, m=args.rollouts, h=args.horizon,
         network=dynaplex.MLP(hidden=(64, 64)),
-        train=dict(loss="ce", epochs=60, batch_size=64, lr=1e-3, patience=10, val_fraction=0.1),
+        train=dict(loss=args.loss, epochs=60, batch_size=64, lr=1e-3, patience=10, val_fraction=0.1),
     )
     started = time.time()
     agents = dcl.run(generations=args.generations)

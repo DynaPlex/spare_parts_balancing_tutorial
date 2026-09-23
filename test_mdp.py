@@ -72,7 +72,7 @@ def test_counts_mirror_the_parts_throughout_a_long_run():
         assert state.systems_down == by_status[PartStatus.TO_CUSTOMER]
         assert state.orders_open == sum(len(point.open_orders) for point in state.stock_points)
         assert state.busy_servers == by_status[PartStatus.IN_REPAIR] <= mdp.repair_servers
-        assert len(state.repair_queue) == by_status[PartStatus.REPAIR_QUEUE]
+        assert state.queued == by_status[PartStatus.REPAIR_QUEUE]
         if by_status[PartStatus.REPAIR_QUEUE] > 0:
             assert state.busy_servers == mdp.repair_servers
 

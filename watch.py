@@ -118,7 +118,7 @@ def draw(ax, run: Run, policy_name: str) -> None:
         if not point.open_orders.is_empty():
             label += f", {len(point.open_orders)} ordered"
         if k == AMS:
-            label += f"\nshop: {state.busy_servers} in repair, {len(state.repair_queue)} queued"
+            label += f"\nshop: {state.busy_servers} in repair, {state.queued} queued"
         ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=7, markerfacecolor="none")
         ax.annotate(label, (loc.lon, loc.lat), textcoords="offset points",
                     xytext=STOCK_LABEL_OFFSET.get(loc.code, (6, -12)), fontsize=7, color="#202028",

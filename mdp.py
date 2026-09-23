@@ -23,8 +23,9 @@ Time. One period is a few hours (`network.py` says how many). Every period:
        - a part that reaches a system that is down is installed, and the failed
          unit it replaces starts its way back to AMS;
        - a failed unit that reaches AMS enters the repair shop.
-  2. Repair. The shop has `repair_servers` parallel servers and a first-come
-     first-served queue. Every busy server has, every period, the same fixed
+  2. Repair. The shop has `repair_servers` parallel servers; failed units
+     wait for a free one. The parts are all alike, so it does not matter which
+     waiting unit goes first, and the queue is just a count. Every busy server has, every period, the same fixed
      probability 1 / `repair_mean` of finishing its repair, so repair times are
      geometric, like travel times, and the state needs no clocks for them
      either. This is not realistic: a repair that has been going on for weeks
@@ -88,7 +89,7 @@ class PartStatus(Enum):
     OUTBOUND = auto()       # serviceable, travelling from AMS to stock point `dest`
     TO_CUSTOMER = auto()    # serviceable, travelling from `origin` to the down system at `dest`
     RETURNING = auto()      # failed, travelling from `origin` back to AMS
-    REPAIR_QUEUE = auto()   # failed, at AMS, waiting for a free repair server
+    REPAIR_QUEUE = auto()   # failed, at AMS, waiting for a free server
     IN_REPAIR = auto()      # being repaired at AMS
 
 
@@ -110,7 +111,7 @@ class StockPoint:
 class State:
     parts: list[Part]
     stock_points: list[StockPoint]
-    repair_queue: FifoQueue     # indices into `parts`, first come first served
+    queued: int                 # REPAIR_QUEUE parts: failed units waiting for a server
     busy_servers: int
     systems_down: int           # TO_CUSTOMER parts: systems waiting for one
     orders_open: int            # unfilled orders, over all stock points
@@ -185,16 +186,6 @@ class SparePartsMDP:
 
     # ---- helpers ----------------------------------------------------------
 
-    def _enter_repair_shop(self, state: State, index: int) -> None:
-        part = state.parts[index]
-        part.origin = AMS
-        if state.busy_servers < self.repair_servers:
-            state.busy_servers += 1
-            part.status = PartStatus.IN_REPAIR
-        else:
-            part.status = PartStatus.REPAIR_QUEUE
-            state.repair_queue.push_back(index)
-
     def _nearest_with_stock(self, state: State, location: int) -> int:
         """The stock point with a part on hand that reaches `location` fastest
         (ties: the site's own shelf); -1 if none."""
@@ -257,8 +248,7 @@ class SparePartsMDP:
                 on_hand=self.base_stock[k], inbound=0, open_orders=FifoQueue()))
             for _ in range(self.base_stock[k]):
                 parts.append(Part(status=PartStatus.STOCK, origin=k, dest=k))
-        return State(parts=parts, stock_points=stock_points, repair_queue=FifoQueue(),
-                     busy_servers=0, systems_down=0, orders_open=0, period=0, holding=False,
+        return State(parts=parts, stock_points=stock_points, queued=0, busy_servers=0, systems_down=0, orders_open=0, period=0, holding=False,
                      category=StateCategory.AWAIT_EVENT)
 
     def modify_state_with_action(self, state: State, context: TrajectoryContext,
@@ -278,7 +268,7 @@ class SparePartsMDP:
     def modify_state_with_event(self, state: State, context: TrajectoryContext) -> None:
         state.period += 1
 
-        # 1 + 2. travel and repair: one pass over the parts
+        # 1 + 2. travel, and the repairs in progress: one pass over the parts
         for index in range(self.n_parts):
             part = state.parts[index]
             if part.status == PartStatus.OUTBOUND:
@@ -296,7 +286,9 @@ class SparePartsMDP:
                     part.dest = AMS
             elif part.status == PartStatus.RETURNING:
                 if context.rng.random() < self.travel_prob[part.origin, part.dest]:
-                    self._enter_repair_shop(state, index)
+                    part.status = PartStatus.REPAIR_QUEUE
+                    part.origin = AMS
+                    state.queued += 1
             elif part.status == PartStatus.IN_REPAIR:
                 # every busy server finishes with the same probability, every period
                 if context.rng.random() < self.repair_prob:
@@ -304,8 +296,14 @@ class SparePartsMDP:
                     state.stock_points[AMS].on_hand += 1
                     state.busy_servers -= 1
                     state.holding = False               # new supply ends a hold
-                    if not state.repair_queue.is_empty():
-                        self._enter_repair_shop(state, state.repair_queue.pop_front())
+
+        # 2. the shop: free servers take waiting units (any of them: the parts are alike)
+        if state.queued > 0 and state.busy_servers < self.repair_servers:
+            for part in state.parts:
+                if part.status == PartStatus.REPAIR_QUEUE and state.busy_servers < self.repair_servers:
+                    part.status = PartStatus.IN_REPAIR
+                    state.queued -= 1
+                    state.busy_servers += 1
 
         # 3. demand
         event = self.event_sampler.sample(context.rng)

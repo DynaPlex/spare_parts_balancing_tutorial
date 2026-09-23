@@ -35,7 +35,7 @@ class SparePartsFeaturizer(Featurizer):
             self.v.append(self.mdp.exposure(state, k) * 100.0)
 
         # The repair shop: parts being repaired come out at a fixed rate each.
-        self.v.append(float(len(state.repair_queue)))
+        self.v.append(float(state.queued))
         self.v.append(float(state.busy_servers))
 
         # The rest of the pool: on its way back, or on its way to a system that is down.

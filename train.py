@@ -32,7 +32,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--samples", type=int, default=8000, help="labelled decision states (n)")
     parser.add_argument("--rollouts", type=int, default=256, help="rollouts per candidate action (m)")
-    parser.add_argument("--horizon", type=int, default=540, help="rollout length in periods (90 days)")
+    parser.add_argument("--horizon", type=int, default=1800, help="rollout length in periods (300 days)")
     parser.add_argument("--generations", type=int, default=1)
     parser.add_argument("--loss", choices=["soft_ce", "ce", "count_ce"], default="soft_ce",
                         help="soft_ce = near-ties get near-equal targets; ce = the winning action only")
@@ -54,8 +54,8 @@ def main() -> None:
     agent.save(args.out)
     print(f"\ntrained in {time.time() - started:.0f} s; policy saved to {args.out}\n")
 
-    comparer = dynaplex.PolicyComparer(mdp, number_of_trajectories=512, warmup_time=1500,
-                                       horizon=9000, seed=0, checks=False)
+    comparer = dynaplex.PolicyComparer(mdp, number_of_trajectories=512, warmup_time=5000,
+                                       horizon=30000, seed=0, checks=False)
     print(comparer.compare({
         "FirstComeFirstServed": FirstComeFirstServed(mdp),
         **{f"Trained (generation {a.info['generation']})": a for a in agents},

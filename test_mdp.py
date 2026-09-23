@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import dynaplex
-from dynaplex.modelling import StateCategory, new_context, probe_state
+from dynaplex.modelling import StateCategory, new_context
 
 from featurizer import SparePartsFeaturizer
 from mdp import AMS, FirstComeFirstServed, PartStatus, SparePartsMDP
@@ -41,13 +41,30 @@ def test_travel_times_are_whole_periods_between_one_and_ten():
 
 # ---- the initial state ------------------------------------------------------
 
-def test_initial_state_has_one_part_on_every_shelf():
+def test_initial_state_has_the_whole_pool_in_amsterdam_and_every_order_open():
     mdp = default_mdp()
     state = mdp.get_initial_state(new_context(mdp))
     assert mdp.n_parts == len(STOCK_POINTS) == 8
-    assert [point.on_hand for point in state.stock_points] == [1] * 8
-    assert all(part.status == PartStatus.STOCK for part in state.parts)
-    assert state.category == StateCategory.AWAIT_EVENT
+    assert [point.on_hand for point in state.stock_points] == [8] + [0] * 7
+    assert [len(point.open_orders) for point in state.stock_points] == [0] + [1] * 7
+    assert state.orders_open == 7 and all(part.status == PartStatus.STOCK for part in state.parts)
+    assert state.category == StateCategory.AWAIT_ACTION       # position the pool
+
+
+def positioned(mdp, context):
+    """The initial state after the pool has been positioned and every part has
+    arrived: part k on the shelf of stock point k, the rest in AMS."""
+    state = mdp.get_initial_state(context)
+    for k in range(1, mdp.n_stock_points):
+        for _ in range(mdp.base_stock[k]):
+            state.stock_points[AMS].on_hand -= 1
+            state.stock_points[k].on_hand += 1
+            state.stock_points[k].open_orders.pop_front()
+            state.orders_open -= 1
+            state.parts[k].origin = k
+            state.parts[k].dest = k
+    mdp._set_category(state)
+    return state
 
 
 def test_unstable_repair_shop_is_refused():
@@ -92,7 +109,7 @@ def tiny_mdp(demand_at: str, stock_at: list[str]) -> SparePartsMDP:
 
 def first_demand(mdp):
     context = new_context(mdp, seed=3)
-    state = mdp.get_initial_state(context)
+    state = positioned(mdp, context)
     while all(part.status == PartStatus.STOCK for part in state.parts):
         mdp.modify_state_with_event(state, context)
     return state
@@ -136,7 +153,8 @@ def test_failure_at_an_unstocked_site_waits_for_the_nearest_part():
 def test_holding_postpones_the_question_until_something_changes():
     mdp = default_mdp()
     context = new_context(mdp, seed=5)
-    state = probe_state(mdp, seed=5)
+    state = with_open_orders(mdp, ["MIA"])
+    assert state.category == StateCategory.AWAIT_ACTION
     mdp.modify_state_with_action(state, context, 0)
     assert state.holding and state.category == StateCategory.AWAIT_EVENT
     orders_before = state.orders_open
@@ -151,9 +169,9 @@ def test_holding_postpones_the_question_until_something_changes():
 # ---- the hand-written policies ----------------------------------------------
 
 def with_open_orders(mdp, codes: list[str]):
-    """The initial state, except that the stock points in `codes` have shipped
+    """The positioned pool, except that the stock points in `codes` have shipped
     their part to a customer (in this order) and ordered a replacement."""
-    state = mdp.get_initial_state(new_context(mdp))
+    state = positioned(mdp, new_context(mdp))
     for age, code in enumerate(codes):
         k = CODE[code]
         state.stock_points[k].on_hand = 0

@@ -100,8 +100,8 @@ def mean_travel_periods(handling_hours: float = 3.0, speed_kmh: float = 450.0,
 
 
 def default_mdp(
-    demands_per_week: float = 1.7,
-    repair_mean_days: float = 20.0,
+    demands_per_week: float = 0.5,
+    repair_mean_days: float = 70.0,
     repair_servers: int = 6,
     regional_base_stock: int = 1,
     ams_stock: int = 1,

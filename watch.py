@@ -3,7 +3,7 @@ that are down, and the shop repairing, one frame per period.
 
     python watch.py                        # the textbook rule
     python watch.py --policy trained       # after train.py
-    python watch.py --fps 20 --periods 6000
+    python watch.py --fps 20 --periods 20000
 
 The model runs in plain Python here (no compilation): the same mdp.py, called
 directly, so you can put a print() or a breakpoint anywhere in it and watch.
@@ -142,7 +142,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--policy", choices=["fcfs", "random", "trained"], default="fcfs")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--periods", type=int, default=3000, help="periods to show (500 days)")
+    parser.add_argument("--periods", type=int, default=10000, help="periods to show (1667 days)")
     parser.add_argument("--fps", type=float, default=10.0)
     args = parser.parse_args()
 

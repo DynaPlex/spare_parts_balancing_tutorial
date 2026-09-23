@@ -216,16 +216,24 @@ class SparePartsMDP:
     # ---- MDP contract -----------------------------------------------------
 
     def get_initial_state(self, context: TrajectoryContext) -> State:
-        """Every stock point at its base stock, nothing moving, nothing broken."""
+        """The whole pool on the shelf in AMS and every regional stock point
+        waiting for its base stock: the first decisions position the pool."""
         parts: list[Part] = []
+        for _ in range(self.n_parts):
+            parts.append(Part(status=PartStatus.STOCK, origin=AMS, dest=AMS))
         stock_points: list[StockPoint] = []
-        for k in range(self.n_stock_points):
-            stock_points.append(StockPoint(
-                on_hand=self.base_stock[k], inbound=0, open_orders=FifoQueue()))
+        stock_points.append(StockPoint(on_hand=self.n_parts, inbound=0, open_orders=FifoQueue()))
+        orders_open = 0
+        for k in range(1, self.n_stock_points):
+            orders = FifoQueue()
             for _ in range(self.base_stock[k]):
-                parts.append(Part(status=PartStatus.STOCK, origin=k, dest=k))
-        return State(parts=parts, stock_points=stock_points, queued=0, busy_servers=0, systems_down=0, orders_open=0, period=0, holding=False,
-                     category=StateCategory.AWAIT_EVENT)
+                orders.push_back(0)
+            stock_points.append(StockPoint(on_hand=0, inbound=0, open_orders=orders))
+            orders_open += self.base_stock[k]
+        state = State(parts=parts, stock_points=stock_points, queued=0, busy_servers=0, systems_down=0,
+                      orders_open=orders_open, period=0, holding=False, category=StateCategory.AWAIT_EVENT)
+        self._set_category(state)
+        return state
 
     def modify_state_with_action(self, state: State, context: TrajectoryContext,
                                  action: int) -> None:

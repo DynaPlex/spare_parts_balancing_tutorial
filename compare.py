@@ -31,8 +31,8 @@ def policies(mdp) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--trajectories", type=int, default=1024)
-    parser.add_argument("--warmup", type=int, default=1500, help="periods before costs count")
-    parser.add_argument("--horizon", type=int, default=9000, help="periods that count (1500 days)")
+    parser.add_argument("--warmup", type=int, default=5000, help="periods before costs count")
+    parser.add_argument("--horizon", type=int, default=30000, help="periods that count (5000 days)")
     args = parser.parse_args()
 
     mdp = default_mdp()

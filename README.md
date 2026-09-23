@@ -10,18 +10,19 @@ policies on cost.
 
 A service organisation owns a pool of eight identical, expensive, repairable
 spare parts. Systems all over the world contain this part, and now and then
-one fails: about 1.7 failures a week, spread over 33 sites. A failed system is
+one fails: about one failure every two weeks, spread over 33 sites. A failed system is
 down until a serviceable part is installed.
 
 - **Stock points.** Eight sites hold stock, one part each: Amsterdam, Paris,
   Miami, Dubai, Singapore, Kuala Lumpur, São Paulo and Shanghai. Amsterdam is
-  also the repair shop. The other 25 sites hold nothing.
+  also the repair shop. The other 25 sites hold nothing. The pool starts on the
+  shelf in Amsterdam, and the first decisions position it.
 - **Fulfilment.** A failure is served from the nearest stock point that has a
   part on hand, its own shelf first. The part travels there (one period from
   the own shelf, up to ten across the world), is installed, and the failed unit
   travels back to Amsterdam for repair. If no stock point has a part, one is
   borrowed at a fixed cost.
-- **Repair.** Six repair servers; a repair takes 20 days on average. A repaired
+- **Repair.** Six repair servers; a repair takes ten weeks on average. A repaired
   part is Amsterdam stock again, so the pool is closed.
 - **Orders.** A stock point that ships its part orders a replacement from
   Amsterdam. Orders wait until Amsterdam decides to fill them.

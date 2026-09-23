@@ -1,33 +1,39 @@
 # Spare parts balancing
 
 A [DynaPlex](https://dynaplex.github.io/DynaPlex/) example, written for a
-hands-on tutorial on deep reinforcement learning (DRL). A service organisation
-owns a handful of expensive, repairable spare parts, spread over stock points
-around the world. Parts fail, systems are down until a replacement arrives, the
-failed units go back to the repair
-shop in Amsterdam, and every repaired part raises the same question: **which
-station gets it, or should it wait in Amsterdam?**
+hands-on tutorial on deep reinforcement learning (DRL). The whole model is
+plain Python in one file, a textbook policy sits next to it, and the scripts
+let you watch a policy run, train a neural network with DCL, and compare
+policies on cost.
 
-The example is about **modelling**: the whole model is plain Python in one
-file, the hand-written policies sit next to it, and you can watch any policy
-run the network, train a neural network to do the job, and compare on cost.
+## The model
 
-## The story
+A service organisation owns a pool of eight identical, expensive, repairable
+spare parts. Systems all over the world contain this part, and now and then
+one fails: about 1.7 failures a week, spread over 33 sites. A failed system is
+down until a serviceable part is installed.
 
-The part is expensive, so the pool owns exactly one per station: eight parts
-for eight stock points, and about five of them are in the repair shop at any
-time. Whenever a station ships its part to a system that is down it orders a
-replacement, and the orders queue up in Amsterdam. Every time a repair
-completes, the shop asks: which open order do we fill first? The textbook
-answer is first come, first served. But a part sent to Singapore is out of
-service for a day and a half, Miami's region has no other station nearby, and
-a shop with five parts in repair will release the next one soon. There is room
-to be smarter, and
-that is the room a trained policy has to find.
+- **Stock points.** Eight sites hold stock, one part each: Amsterdam, Paris,
+  Miami, Dubai, Singapore, Kuala Lumpur, São Paulo and Shanghai. Amsterdam is
+  also the repair shop. The other 25 sites hold nothing.
+- **Fulfilment.** A failure is served from the nearest stock point that has a
+  part on hand, its own shelf first. The part travels there (one period from
+  the own shelf, up to ten across the world), is installed, and the failed unit
+  travels back to Amsterdam for repair. If no stock point has a part, one is
+  borrowed at a fixed cost.
+- **Repair.** Six repair servers; a repair takes 20 days on average. A repaired
+  part is Amsterdam stock again, so the pool is closed.
+- **Orders.** A stock point that ships its part orders a replacement from
+  Amsterdam. Orders wait until Amsterdam decides to fill them.
+- **The decision.** Whenever Amsterdam has a part on hand and orders are open,
+  it chooses which order to fill, or holds the part until the next repair
+  completes or the next order opens.
+- **Cost.** One per period (four hours) for every system that is down, plus
+  the borrowing cost. The objective is the average cost per period.
 
-What it costs: one per period (four hours) for every system that is down,
-waiting for a part, and a lump sum when no station has a part at all and one has to be
-borrowed elsewhere.
+Travel and repair times are geometric: every period, a travelling part arrives
+and a busy server finishes with a fixed probability. That is not realistic; it
+keeps the state free of clocks and the code short.
 
 ## Quickstart
 
@@ -49,7 +55,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 | File | What it is |
 |---|---|
-| `mdp.py` | **The model**: parts, stations, the repair shop, one period of time, the allocation decision, and the textbook policy. Start here. |
+| `mdp.py` | **The model**: parts, stock points, the repair shop, one period of time, the allocation decision, and the textbook policy. Start here. |
 | `network.py` | The map (invented network, real cities), travel times, and `default_mdp()`, the configuration every script uses. Ordinary Python: change any number. |
 | `featurizer.py` | What the neural network sees: the numbers written from a state. |
 | `test_mdp.py` | Readable checks of the model, on hand-built situations. |
@@ -59,11 +65,5 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 ## The policies
 
-- **FirstComeFirstServed**: fill the oldest order. The textbook rule, and the only hand-written policy here.
-- **Trained**: whatever `train.py` learns from the textbook rule's rollouts. Considerably cheaper.
-
-The challenge: watch the trained policy, work out what it does differently,
-and write that down as a rule of your own next to `FirstComeFirstServed`.
-How close can an explainable rule get? Other things to try: change the
-features, change the network size, give Amsterdam two parts, make the repair
-shop slower, and see what each does.
+- **FirstComeFirstServed**: fill the oldest open order. The textbook rule.
+- **Trained**: whatever `train.py` learns from the textbook rule's rollouts.

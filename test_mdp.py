@@ -1,0 +1,195 @@
+"""Readable checks of the model: the map, the initial state, the accounting
+identity, instant fulfilment at the same site, holding, and the policies
+on hand-built situations. Run with `python -m pytest`."""
+import numpy as np
+import pytest
+
+import dynaplex
+from dynaplex.modelling import DiscreteDist, StateCategory, new_context, probe_state
+
+from featurizer import SparePartsFeaturizer
+from mdp import AMS, EmptiestFirst, FirstComeFirstServed, MostExposedFirst, PartStatus, SparePartsMDP
+from network import LOCATIONS, STOCK_POINTS, default_mdp, mean_travel_periods
+
+CODE = {loc.code: i for i, loc in enumerate(LOCATIONS)}
+
+
+def simulate(mdp, policy, periods: int, seed: int = 1):
+    """Run the model in plain Python and hand every state to `check`-style callers."""
+    context = new_context(mdp, seed)
+    state = mdp.get_initial_state(context)
+    for _ in range(periods):
+        while state.category == StateCategory.AWAIT_ACTION:
+            mdp.modify_state_with_action(state, context, policy.get_action(state))
+        mdp.modify_state_with_event(state, context)
+        yield state
+
+
+# ---- the map --------------------------------------------------------------
+
+def test_travel_times_are_whole_periods_between_one_and_ten_and_zero_at_home():
+    m = mean_travel_periods()
+    assert np.all(np.diag(m) == 0)
+    off_diagonal = m[~np.eye(len(LOCATIONS), dtype=bool)]
+    assert off_diagonal.min() == 1 and off_diagonal.max() == 10
+    assert np.array_equal(m, m.T)
+    assert m[CODE["AMS"], CODE["CDG"]] == 1       # next door
+    assert m[CODE["AMS"], CODE["JFK"]] == 4       # across the Atlantic
+    assert m[CODE["AMS"], CODE["SIN"]] == 7       # far east
+    assert m[CODE["AMS"], CODE["SYD"]] == 10      # the other side of the world
+    assert m[CODE["SIN"], CODE["KUL"]] == 1       # neighbours
+
+
+# ---- the initial state ------------------------------------------------------
+
+def test_initial_state_has_one_part_on_every_shelf():
+    mdp = default_mdp()
+    state = mdp.get_initial_state(new_context(mdp))
+    assert mdp.n_parts == len(STOCK_POINTS) == 8
+    assert [point.on_hand for point in state.stock_points] == [1] * 8
+    assert all(part.status == PartStatus.STOCK for part in state.parts)
+    assert state.category == StateCategory.AWAIT_EVENT
+
+
+def test_unstable_repair_shop_is_refused():
+    with pytest.raises(ValueError, match="unstable"):
+        default_mdp(demands_per_week=20.0, repair_servers=1)
+
+
+# ---- the accounting identity ------------------------------------------------
+
+def test_counts_mirror_the_parts_throughout_a_long_run():
+    mdp = default_mdp()
+    for state in simulate(mdp, FirstComeFirstServed(mdp), periods=3000):
+        by_status = {status: 0 for status in PartStatus}
+        for part in state.parts:
+            by_status[part.status] += 1
+        for k, point in enumerate(state.stock_points):
+            on_hand = sum(1 for p in state.parts if p.status == PartStatus.STOCK and p.origin == k)
+            inbound = sum(1 for p in state.parts if p.status == PartStatus.OUTBOUND and p.dest == k)
+            assert point.on_hand == on_hand and point.inbound == inbound
+            if k != AMS:
+                assert point.on_hand + point.inbound + len(point.open_orders) == mdp.base_stock[k]
+        assert state.systems_down == by_status[PartStatus.TO_CUSTOMER]
+        assert state.busy_servers == by_status[PartStatus.IN_REPAIR] <= mdp.repair_servers
+        assert len(state.repair_queue) == by_status[PartStatus.REPAIR_QUEUE]
+        if by_status[PartStatus.REPAIR_QUEUE] > 0:
+            assert state.busy_servers == mdp.repair_servers
+
+
+# ---- a part on the shelf serves instantly -----------------------------------
+
+def tiny_mdp(demand_at: str, stock_at: list[str]) -> SparePartsMDP:
+    """A three-location world (AMS, CDG, MIA) where every failure is at `demand_at`."""
+    codes = ["AMS", "CDG", "MIA"]
+    travel = mean_travel_periods()[np.ix_([CODE[c] for c in codes], [CODE[c] for c in codes])]
+    return SparePartsMDP(
+        n_stock_points=3, mean_travel_time=travel,
+        demand_prob=[0.1 if c == demand_at else 0.0 for c in codes],
+        base_stock=[1 if c in stock_at else 0 for c in codes],
+        repair_time=DiscreteDist.constant(10), repair_servers=2)
+
+
+def first_demand(mdp):
+    context = new_context(mdp, seed=3)
+    state = mdp.get_initial_state(context)
+    while state.systems_down == 0 and all(part.status == PartStatus.STOCK for part in state.parts):
+        mdp.modify_state_with_event(state, context)
+    return state
+
+
+def test_failure_at_a_stocked_site_never_waits():
+    mdp = tiny_mdp(demand_at="CDG", stock_at=["AMS", "CDG"])
+    state = first_demand(mdp)
+    assert state.systems_down == 0                        # installed on the spot
+    failed = [p for p in state.parts if p.status == PartStatus.RETURNING]
+    assert len(failed) == 1 and failed[0].origin == CODE["CDG"] and failed[0].dest == AMS
+    orders = state.stock_points[CODE["CDG"]].open_orders
+    assert len(orders) == 1 and orders[0] == state.period
+    assert state.category == StateCategory.AWAIT_ACTION      # AMS has a part, CDG has an order
+
+
+def test_failure_at_ams_goes_straight_into_the_shop():
+    mdp = tiny_mdp(demand_at="AMS", stock_at=["AMS"])
+    state = first_demand(mdp)
+    assert state.systems_down == 0
+    assert state.parts[0].status == PartStatus.IN_REPAIR and state.busy_servers == 1
+
+
+def test_failure_at_an_unstocked_site_waits_for_the_nearest_part():
+    mdp = tiny_mdp(demand_at="MIA", stock_at=["AMS", "CDG"])
+    state = first_demand(mdp)
+    assert state.systems_down == 1
+    travelling = [p for p in state.parts if p.status == PartStatus.TO_CUSTOMER]
+    assert len(travelling) == 1 and travelling[0].dest == CODE["MIA"]
+    assert travelling[0].origin in (AMS, CODE["CDG"])         # both are 5 periods from Miami
+
+
+# ---- holding ----------------------------------------------------------------
+
+def test_holding_postpones_the_question_and_a_new_order_reopens_it():
+    mdp = default_mdp()
+    context = new_context(mdp, seed=5)
+    state = probe_state(mdp, seed=5)
+    mdp.modify_state_with_action(state, context, 0)
+    assert state.category == StateCategory.AWAIT_EVENT
+    assert state.next_review == state.period + mdp.hold_periods == state.period + 12
+    # A new order somewhere ends the hold at once.
+    state.stock_points[CODE["MIA"]].open_orders.push_back(state.period)
+    state.next_review = state.period                          # what modify_state_with_event does
+    mdp._set_category(state)
+    assert state.category == StateCategory.AWAIT_ACTION
+
+
+# ---- the hand-written policies ----------------------------------------------
+
+def with_open_orders(mdp, codes: list[str]):
+    """The initial state, except that the stock points in `codes` have shipped
+    their part to a customer (in this order) and ordered a replacement."""
+    state = mdp.get_initial_state(new_context(mdp))
+    for age, code in enumerate(codes):
+        k = CODE[code]
+        state.stock_points[k].on_hand = 0
+        state.stock_points[k].open_orders.push_back(age)
+        state.parts[k].status = PartStatus.TO_CUSTOMER
+        state.parts[k].dest = k
+        state.systems_down += 1
+    state.period = len(codes)
+    mdp._set_category(state)
+    return state
+
+
+def test_first_come_first_served_fills_the_oldest_order():
+    mdp = default_mdp()
+    state = with_open_orders(mdp, ["MIA", "CDG"])
+    assert FirstComeFirstServed(mdp).get_action(state) == CODE["MIA"]
+    state = with_open_orders(mdp, ["CDG", "MIA"])
+    assert FirstComeFirstServed(mdp).get_action(state) == CODE["CDG"]
+
+
+def test_most_exposed_first_prefers_the_region_without_a_backup():
+    mdp = default_mdp()
+    state = with_open_orders(mdp, ["CDG", "MIA"])
+    # Paris is next door to Amsterdam; Miami's region would be served from
+    # Amsterdam across the ocean. Miami is the bigger loss, whatever the order age.
+    assert mdp.exposure(state, CODE["MIA"]) > mdp.exposure(state, CODE["CDG"]) > 0.0
+    assert MostExposedFirst(mdp, reserve=0).get_action(state) == CODE["MIA"]
+    assert mdp.exposure(state, CODE["DXB"]) == 0.0           # Dubai still has its part
+
+
+def test_reserve_keeps_the_last_part_in_amsterdam():
+    mdp = default_mdp()
+    state = with_open_orders(mdp, ["MIA"])
+    assert state.stock_points[AMS].on_hand == 1
+    assert MostExposedFirst(mdp, reserve=1).get_action(state) == 0
+    assert EmptiestFirst(mdp, reserve=1).get_action(state) == 0
+    assert MostExposedFirst(mdp, reserve=0).get_action(state) == CODE["MIA"]
+
+
+# ---- DynaPlex's own checks ---------------------------------------------------
+
+def test_model_passes_the_dynaplex_checks_with_the_featurizer():
+    mdp = default_mdp()
+    report = dynaplex.check_mdp(mdp, MostExposedFirst(mdp), features=SparePartsFeaturizer,
+                                seeds=8, periods=2000, relax_program_flow=True)
+    assert report.decisions > 0 and report.feature_rows > 0

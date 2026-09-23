@@ -1,0 +1,15 @@
+# Everything the tutorial needs; Python 3.11-3.14 on Windows, macOS or Linux.
+#
+#   python -m venv .venv
+#   .venv/bin/pip install -r requirements.txt          (Windows: .venv\Scripts\pip)
+#
+# The extra index makes pip pick the CPU-only torch build on Linux (a ~200 MB
+# download instead of ~2.5 GB of CUDA libraries). The models here are small;
+# a GPU does not help. On macOS and Windows it changes nothing.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+dynaplex==1.14.0
+numpy
+torch
+matplotlib
+pytest

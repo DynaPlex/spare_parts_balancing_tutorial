@@ -13,6 +13,7 @@ in dynaplex_runs/, and rerunning with the same settings reuses them.
 """
 import argparse
 import os
+import shutil
 import time
 
 import dynaplex
@@ -48,6 +49,7 @@ def main() -> None:
     started = time.time()
     agents = dcl.run(generations=args.generations)
     agent = agents[-1]
+    shutil.rmtree(args.out, ignore_errors=True)     # a rerun replaces the previous policy
     agent.save(args.out)
     print(f"\ntrained in {time.time() - started:.0f} s; policy saved to {args.out}\n")
 

@@ -90,13 +90,12 @@ def mean_travel_periods(handling_hours: float = 3.0, speed_kmh: float = 450.0,
     effective speed, rounded, at least one period and at most `max_periods`.
     That speed is about half the cruise speed of air freight — a shipment waits
     for the next departure, and the far side of the world needs a transfer. A
-    part that is already at the site takes no time at all: the diagonal is zero."""
+    part on the site's own shelf still needs the handling time: the diagonal is
+    one period, installing included."""
     n = len(LOCATIONS)
     mean = np.zeros((n, n), dtype=np.float64)
     for i, a in enumerate(LOCATIONS):
         for j, b in enumerate(LOCATIONS):
-            if i == j:
-                continue
             hours = handling_hours + distance_km(a, b) / speed_kmh
             mean[i, j] = min(max_periods, max(1, round(hours / HOURS_PER_PERIOD)))
     return mean
@@ -109,7 +108,6 @@ def default_mdp(
     repair_servers: int = 6,
     regional_base_stock: int = 1,
     ams_stock: int = 1,
-    hold_hours: int = 48,
     loan_cost: float = 40.0,
     handling_hours: float = 3.0,
     speed_kmh: float = 450.0,
@@ -133,6 +131,5 @@ def default_mdp(
         base_stock=[ams_stock] + [regional_base_stock] * (len(STOCK_POINTS) - 1),
         repair_time=repair_time,
         repair_servers=repair_servers,
-        hold_periods=hold_hours // HOURS_PER_PERIOD,
         loan_cost=loan_cost,
     )

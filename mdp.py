@@ -17,12 +17,11 @@ Time. One period is a few hours (`network.py` says how many). Every period:
 
   1. Travel. Every travelling part arrives with probability 1 / (mean travel
      time of its leg), so travel times are geometric and the state needs no
-     clocks for them. A leg with mean travel time 0 — the part is already at
-     the site that needs it — takes no time at all: the system is up again
-     the moment it fails, and never counts as down.
+     clocks for them. Every leg takes at least one period, also from a site's
+     own shelf: installing takes time too.
        - a part sent to a regional stock point joins its stock;
        - a part that reaches a system that is down is installed, and the failed
-         unit it replaces (a new serial number) starts its way back to AMS;
+         unit it replaces starts its way back to AMS;
        - a failed unit that reaches AMS enters the repair shop.
   2. Repair. The shop has `repair_servers` parallel servers and a first-come
      first-served queue. A repair time is drawn from `repair_time` — any
@@ -32,7 +31,7 @@ Time. One period is a few hours (`network.py` says how many). Every period:
      a part JOINS the queue would extend that outlook to the queue.)
   3. Demand. With large probability nothing happens; otherwise one part fails,
      at a location drawn from `demand_prob`. The nearest stock point (smallest
-     mean travel time) with a part on hand ships one. If no stock point has a
+     mean travel time; its own shelf first) with a part on hand ships one. If no stock point has a
      part on hand, the organisation borrows one elsewhere: a LOAN, at `loan_cost`,
      which does not touch our pool.
   4. Cost. `downtime_cost` per period for every system that is down, waiting
@@ -49,9 +48,8 @@ AMS has whatever is not elsewhere.
 The decision is the ALLOCATION of AMS stock to those orders. It comes up when
 AMS has a part on hand and at least one order is open. Action k >= 1 sends a
 part to stock point k (valid if k has an open order; its oldest order is then
-filled). Action 0 holds: nothing is sent, and the question is not asked again
-until `hold_periods` later, until a repair completes, or until a new order
-opens somewhere, whichever comes first. Holding is a real option: a part on
+filled). Action 0 holds: nothing is sent, and the question is not asked again until
+something changes: a repair completes, or a new order opens somewhere. Holding is a real option: a part on
 its way to Singapore serves nobody for a day, and is a poor answer to the next
 failure in Miami.
 
@@ -95,7 +93,6 @@ class PartStatus(Enum):
 
 @dataclass(slots=True)
 class Part:
-    serial: int             # random; identifies the part in the visualization, nothing else
     status: PartStatus
     origin: int             # location where it is, or that it left
     dest: int               # location it travels to (travelling statuses only)
@@ -115,9 +112,8 @@ class State:
     stock_points: list[StockPoint]
     repair_queue: FifoQueue     # indices into `parts`, first come first served
     busy_servers: int
-    systems_down: int           # number of TO_CUSTOMER parts
     period: int
-    next_review: int            # no allocation decision before this period
+    holding: bool               # the last decision was to hold; cleared when something changes
     category: StateCategory
 
 
@@ -129,12 +125,11 @@ class SparePartsMDP:
     n_stock_points: int
     n_locations: int
     n_parts: int
-    mean_travel: ConstArray2D[np.float64]   # [from, to]: mean travel time in periods; 0 = instant
+    mean_travel: ConstArray2D[np.float64]   # [from, to]: mean travel time in periods, at least 1
     travel_prob: ConstArray2D[np.float64]   # [from, to]: per-period arrival probability
     demand_prob: ConstList[float]           # per location, per period
     base_stock: ConstList[int]              # [0] is the initial AMS stock
     repair_servers: int
-    hold_periods: int
     downtime_cost: float
     loan_cost: float
 
@@ -148,12 +143,12 @@ class SparePartsMDP:
     def __init__(self, n_stock_points: int, mean_travel_time: np.ndarray,
                  demand_prob: list[float], base_stock: list[int],
                  repair_time: DiscreteDist, repair_servers: int,
-                 hold_periods: int = 12, downtime_cost: float = 1.0, loan_cost: float = 40.0):
+                 downtime_cost: float = 1.0, loan_cost: float = 40.0):
         n_locations = len(demand_prob)
         if mean_travel_time.shape != (n_locations, n_locations):
             raise ValueError("mean_travel_time must be n_locations x n_locations")
-        if np.any((mean_travel_time > 0.0) & (mean_travel_time < 1.0)):
-            raise ValueError("a shipment takes at least one period, or none at all (same site)")
+        if np.any(mean_travel_time < 1.0):
+            raise ValueError("a shipment takes at least one period, also from the site's own shelf")
         if len(base_stock) != n_stock_points or min(base_stock) < 0:
             raise ValueError("base_stock needs one non-negative entry per stock point")
         if repair_time.min() < 1:
@@ -173,11 +168,10 @@ class SparePartsMDP:
         self.n_locations = n_locations
         self.n_parts = sum(base_stock)
         self.mean_travel = mean_travel_time.astype(np.float64)
-        self.travel_prob = 1.0 / np.maximum(mean_travel_time, 1.0)
+        self.travel_prob = 1.0 / mean_travel_time
         self.demand_prob = list(demand_prob)
         self.base_stock = list(base_stock)
         self.repair_servers = repair_servers
-        self.hold_periods = hold_periods
         self.downtime_cost = downtime_cost
         self.loan_cost = loan_cost
         self.event_sampler = DiscreteDist.custom(
@@ -187,9 +181,6 @@ class SparePartsMDP:
         self.horizon_type = HorizonType.INFINITE
 
     # ---- helpers ----------------------------------------------------------
-
-    def _new_serial(self, context: TrajectoryContext) -> int:
-        return 100000 + context.rng.choice(900000)
 
     def _enter_repair_shop(self, state: State, context: TrajectoryContext, index: int) -> None:
         part = state.parts[index]
@@ -203,14 +194,16 @@ class SparePartsMDP:
             state.repair_queue.push_back(index)
 
     def _nearest_with_stock(self, state: State, location: int) -> int:
-        """The stock point with a part on hand that reaches `location` fastest; -1 if none."""
+        """The stock point with a part on hand that reaches `location` fastest
+        (ties: the site's own shelf); -1 if none."""
         best = -1
         best_time = 0.0
         for k in range(self.n_stock_points):
-            if state.stock_points[k].on_hand > 0 and (
-                    best < 0 or self.mean_travel[k, location] < best_time):
-                best = k
-                best_time = self.mean_travel[k, location]
+            if state.stock_points[k].on_hand > 0:
+                time = self.mean_travel[k, location]
+                if best < 0 or time < best_time or (time == best_time and k == location):
+                    best = k
+                    best_time = time
         return best
 
     def _take_from_stock(self, state: State, k: int) -> int:
@@ -221,27 +214,22 @@ class SparePartsMDP:
                 return index
         dynaplex.fail("no part on hand at this stock point: the counts and the parts disagree")
 
-    def _installed(self, state: State, context: TrajectoryContext, index: int, location: int) -> None:
-        """The serviceable part is installed at `location`; from here on this
-        slot is the failed unit it replaced (a new serial number), on its way
-        back to AMS — or in the shop already, if `location` is AMS."""
-        part = state.parts[index]
-        part.serial = self._new_serial(context)
-        if self.mean_travel[location, AMS] == 0.0:
-            self._enter_repair_shop(state, context, index)
-        else:
-            part.status = PartStatus.RETURNING
-            part.origin = location
-            part.dest = AMS
-
     def _set_category(self, state: State) -> None:
         """An allocation decision is due when AMS has a part, somebody has an
         order open, and we are not inside a hold."""
         state.category = StateCategory.AWAIT_EVENT
-        if state.stock_points[AMS].on_hand > 0 and state.period >= state.next_review:
+        if state.stock_points[AMS].on_hand > 0 and not state.holding:
             for k in range(1, self.n_stock_points):
                 if not state.stock_points[k].open_orders.is_empty():
                     state.category = StateCategory.AWAIT_ACTION
+
+    def systems_down(self, state: State) -> int:
+        """Systems waiting for a part: the parts on their way to one."""
+        down = 0
+        for part in state.parts:
+            if part.status == PartStatus.TO_CUSTOMER:
+                down += 1
+        return down
 
     def exposure(self, state: State, k: int) -> float:
         """How much stock point `k` is missed right now: the expected extra travel
@@ -277,16 +265,15 @@ class SparePartsMDP:
             stock_points.append(StockPoint(
                 on_hand=self.base_stock[k], inbound=0, open_orders=FifoQueue()))
             for _ in range(self.base_stock[k]):
-                parts.append(Part(serial=self._new_serial(context), status=PartStatus.STOCK,
-                                  origin=k, dest=k, repair_done_at=0))
+                parts.append(Part(status=PartStatus.STOCK, origin=k, dest=k, repair_done_at=0))
         return State(parts=parts, stock_points=stock_points, repair_queue=FifoQueue(),
-                     busy_servers=0, systems_down=0, period=0, next_review=0,
+                     busy_servers=0, period=0, holding=False,
                      category=StateCategory.AWAIT_EVENT)
 
     def modify_state_with_action(self, state: State, context: TrajectoryContext,
                                  action: int) -> None:
         if action == 0:
-            state.next_review = state.period + self.hold_periods
+            state.holding = True
         else:
             part = state.parts[self._take_from_stock(state, AMS)]
             part.status = PartStatus.OUTBOUND
@@ -310,8 +297,10 @@ class SparePartsMDP:
                     state.stock_points[part.dest].on_hand += 1
             elif part.status == PartStatus.TO_CUSTOMER:
                 if context.rng.random() < self.travel_prob[part.origin, part.dest]:
-                    state.systems_down -= 1
-                    self._installed(state, context, index, part.dest)
+                    # installed; from here on this slot is the failed unit it replaced
+                    part.status = PartStatus.RETURNING
+                    part.origin = part.dest
+                    part.dest = AMS
             elif part.status == PartStatus.RETURNING:
                 if context.rng.random() < self.travel_prob[part.origin, part.dest]:
                     self._enter_repair_shop(state, context, index)
@@ -320,7 +309,7 @@ class SparePartsMDP:
                     part.status = PartStatus.STOCK
                     state.stock_points[AMS].on_hand += 1
                     state.busy_servers -= 1
-                    state.next_review = state.period    # new supply ends a hold
+                    state.holding = False               # new supply ends a hold
                     if not state.repair_queue.is_empty():
                         self._enter_repair_shop(state, context, state.repair_queue.pop_front())
 
@@ -332,19 +321,15 @@ class SparePartsMDP:
             if k < 0:
                 context.cumulative_cost += self.loan_cost
             else:
-                index = self._take_from_stock(state, k)
-                if self.mean_travel[k, location] == 0.0:
-                    self._installed(state, context, index, location)   # on the shelf: no wait
-                else:
-                    state.parts[index].status = PartStatus.TO_CUSTOMER
-                    state.parts[index].dest = location
-                    state.systems_down += 1
+                shipped = state.parts[self._take_from_stock(state, k)]
+                shipped.status = PartStatus.TO_CUSTOMER
+                shipped.dest = location
                 if k != AMS:
                     state.stock_points[k].open_orders.push_back(state.period)
-                    state.next_review = state.period    # a new order ends a hold
+                    state.holding = False               # a new order ends a hold
 
         # 4. cost
-        context.cumulative_cost += self.downtime_cost * state.systems_down
+        context.cumulative_cost += self.downtime_cost * self.systems_down(state)
         context.time_elapsed += 1
         self._set_category(state)
 

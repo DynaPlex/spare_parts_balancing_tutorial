@@ -67,7 +67,8 @@ class Run:
         self.context = new_context(mdp, seed)
         self.state = mdp.get_initial_state(self.context)
         self.policy = make_policy(policy_name, mdp, self.context)
-        self.departed: dict[int, int] = {}      # serial -> period the current leg started
+        self.legs: dict[int, tuple | None] = {}  # part index -> (status, origin, dest) while travelling
+        self.departed: dict[int, int] = {}      # part index -> period its current leg started
         self.last_decision = ""
 
     def step(self) -> None:
@@ -78,20 +79,20 @@ class Run:
             self.last_decision = (f"day {state.period / PERIODS_PER_DAY:.1f}: "
                                   + ("hold" if action == 0 else f"AMS → {LOCATIONS[action].code}"))
         mdp.modify_state_with_event(state, self.context)
-        for part in state.parts:
-            if part.status in TRAVELLING:
-                self.departed.setdefault(part.serial, state.period - 1)
-            else:
-                self.departed.pop(part.serial, None)
+        for index, part in enumerate(state.parts):
+            leg = (part.status, part.origin, part.dest) if part.status in TRAVELLING else None
+            if self.legs.get(index) != leg:
+                self.legs[index] = leg
+                self.departed[index] = state.period - 1
 
-    def position(self, part):
+    def position(self, index: int, part):
         """(lon, lat) of a part: at its location, or along its leg, as far as
         its mean travel time says it should be (never quite arriving)."""
         if part.status not in TRAVELLING:
             loc = LOCATIONS[part.origin]
             return loc.lon, loc.lat
         a, b = LOCATIONS[part.origin], LOCATIONS[part.dest]
-        elapsed = self.state.period - self.departed.get(part.serial, self.state.period)
+        elapsed = self.state.period - self.departed.get(index, self.state.period)
         fraction = min(0.92, elapsed / max(1.0, self.mdp.mean_travel[part.origin, part.dest]))
         return a.lon + fraction * (b.lon - a.lon), a.lat + fraction * (b.lat - a.lat)
 
@@ -124,8 +125,8 @@ def draw(ax, run: Run, policy_name: str) -> None:
                     fontweight="bold")
 
     stacked: dict[tuple[float, float], int] = {}
-    for part in state.parts:
-        lon, lat = run.position(part)
+    for index, part in enumerate(state.parts):
+        lon, lat = run.position(index, part)
         n = stacked.get((lon, lat), 0)
         stacked[(lon, lat)] = n + 1
         ax.plot(lon + 2.5 * n, lat + 2.5, "o", color=COLOUR[part.status], markersize=7,
@@ -137,7 +138,7 @@ def draw(ax, run: Run, policy_name: str) -> None:
     cost = run.context.cumulative_cost
     day = state.period / PERIODS_PER_DAY
     per_period = cost / state.period if state.period else 0.0
-    ax.set_title(f"{policy_name}   |   day {day:.1f}   |   {state.systems_down} systems down   |   "
+    ax.set_title(f"{policy_name}   |   day {day:.1f}   |   {run.mdp.systems_down(state)} systems down   |   "
                  f"cost {cost:.0f} ({per_period:.3f} per period)   |   {run.last_decision}",
                  fontsize=9, loc="left")
 

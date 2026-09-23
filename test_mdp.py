@@ -1,5 +1,5 @@
 """Readable checks of the model: the map, the initial state, the accounting
-identity, instant fulfilment at the same site, holding, and the policies
+identity, fulfilment from the nearest shelf, holding, and the policies
 on hand-built situations. Run with `python -m pytest`."""
 import numpy as np
 import pytest
@@ -27,11 +27,10 @@ def simulate(mdp, policy, periods: int, seed: int = 1):
 
 # ---- the map --------------------------------------------------------------
 
-def test_travel_times_are_whole_periods_between_one_and_ten_and_zero_at_home():
+def test_travel_times_are_whole_periods_between_one_and_ten():
     m = mean_travel_periods()
-    assert np.all(np.diag(m) == 0)
-    off_diagonal = m[~np.eye(len(LOCATIONS), dtype=bool)]
-    assert off_diagonal.min() == 1 and off_diagonal.max() == 10
+    assert np.all(np.diag(m) == 1)                # the site's own shelf: installing takes a period
+    assert m.min() == 1 and m.max() == 10
     assert np.array_equal(m, m.T)
     assert m[CODE["AMS"], CODE["CDG"]] == 1       # next door
     assert m[CODE["AMS"], CODE["JFK"]] == 4       # across the Atlantic
@@ -70,14 +69,13 @@ def test_counts_mirror_the_parts_throughout_a_long_run():
             assert point.on_hand == on_hand and point.inbound == inbound
             if k != AMS:
                 assert point.on_hand + point.inbound + len(point.open_orders) == mdp.base_stock[k]
-        assert state.systems_down == by_status[PartStatus.TO_CUSTOMER]
         assert state.busy_servers == by_status[PartStatus.IN_REPAIR] <= mdp.repair_servers
         assert len(state.repair_queue) == by_status[PartStatus.REPAIR_QUEUE]
         if by_status[PartStatus.REPAIR_QUEUE] > 0:
             assert state.busy_servers == mdp.repair_servers
 
 
-# ---- a part on the shelf serves instantly -----------------------------------
+# ---- a failure is served from the nearest shelf ----------------------------
 
 def tiny_mdp(demand_at: str, stock_at: list[str]) -> SparePartsMDP:
     """A three-location world (AMS, CDG, MIA) where every failure is at `demand_at`."""
@@ -93,33 +91,39 @@ def tiny_mdp(demand_at: str, stock_at: list[str]) -> SparePartsMDP:
 def first_demand(mdp):
     context = new_context(mdp, seed=3)
     state = mdp.get_initial_state(context)
-    while state.systems_down == 0 and all(part.status == PartStatus.STOCK for part in state.parts):
+    while all(part.status == PartStatus.STOCK for part in state.parts):
         mdp.modify_state_with_event(state, context)
     return state
 
 
-def test_failure_at_a_stocked_site_never_waits():
+def test_failure_at_a_stocked_site_is_served_from_its_own_shelf():
     mdp = tiny_mdp(demand_at="CDG", stock_at=["AMS", "CDG"])
     state = first_demand(mdp)
-    assert state.systems_down == 0                        # installed on the spot
-    failed = [p for p in state.parts if p.status == PartStatus.RETURNING]
-    assert len(failed) == 1 and failed[0].origin == CODE["CDG"] and failed[0].dest == AMS
+    assert mdp.systems_down(state) == 1
+    shipped = [p for p in state.parts if p.status == PartStatus.TO_CUSTOMER]
+    assert len(shipped) == 1 and shipped[0].origin == CODE["CDG"] == shipped[0].dest
     orders = state.stock_points[CODE["CDG"]].open_orders
     assert len(orders) == 1 and orders[0] == state.period
     assert state.category == StateCategory.AWAIT_ACTION      # AMS has a part, CDG has an order
 
 
-def test_failure_at_ams_goes_straight_into_the_shop():
+def test_installed_part_comes_back_to_the_shop_as_a_failed_unit():
     mdp = tiny_mdp(demand_at="AMS", stock_at=["AMS"])
-    state = first_demand(mdp)
-    assert state.systems_down == 0
+    context = new_context(mdp, seed=3)
+    state = mdp.get_initial_state(context)
+    while state.parts[0].status == PartStatus.STOCK:
+        mdp.modify_state_with_event(state, context)
+    assert state.parts[0].status == PartStatus.TO_CUSTOMER   # from the AMS shelf to the AMS system
+    mdp.modify_state_with_event(state, context)               # mean travel 1: installed next period
+    assert state.parts[0].status == PartStatus.RETURNING and state.parts[0].origin == AMS
+    mdp.modify_state_with_event(state, context)               # and back in the shop the period after
     assert state.parts[0].status == PartStatus.IN_REPAIR and state.busy_servers == 1
 
 
 def test_failure_at_an_unstocked_site_waits_for_the_nearest_part():
     mdp = tiny_mdp(demand_at="MIA", stock_at=["AMS", "CDG"])
     state = first_demand(mdp)
-    assert state.systems_down == 1
+    assert mdp.systems_down(state) == 1
     travelling = [p for p in state.parts if p.status == PartStatus.TO_CUSTOMER]
     assert len(travelling) == 1 and travelling[0].dest == CODE["MIA"]
     assert travelling[0].origin in (AMS, CODE["CDG"])         # both are 5 periods from Miami
@@ -127,18 +131,20 @@ def test_failure_at_an_unstocked_site_waits_for_the_nearest_part():
 
 # ---- holding ----------------------------------------------------------------
 
-def test_holding_postpones_the_question_and_a_new_order_reopens_it():
+def test_holding_postpones_the_question_until_something_changes():
     mdp = default_mdp()
     context = new_context(mdp, seed=5)
     state = probe_state(mdp, seed=5)
     mdp.modify_state_with_action(state, context, 0)
-    assert state.category == StateCategory.AWAIT_EVENT
-    assert state.next_review == state.period + mdp.hold_periods == state.period + 12
-    # A new order somewhere ends the hold at once.
-    state.stock_points[CODE["MIA"]].open_orders.push_back(state.period)
-    state.next_review = state.period                          # what modify_state_with_event does
-    mdp._set_category(state)
-    assert state.category == StateCategory.AWAIT_ACTION
+    assert state.holding and state.category == StateCategory.AWAIT_EVENT
+    orders_before = sum(len(point.open_orders) for point in state.stock_points)
+    ams_before = state.stock_points[AMS].on_hand
+    while state.category == StateCategory.AWAIT_EVENT:
+        mdp.modify_state_with_event(state, context)
+    # The question is back only because an order opened or a repair completed.
+    orders_now = sum(len(point.open_orders) for point in state.stock_points)
+    assert not state.holding
+    assert orders_now > orders_before or state.stock_points[AMS].on_hand > ams_before
 
 
 # ---- the hand-written policies ----------------------------------------------
@@ -153,7 +159,6 @@ def with_open_orders(mdp, codes: list[str]):
         state.stock_points[k].open_orders.push_back(age)
         state.parts[k].status = PartStatus.TO_CUSTOMER
         state.parts[k].dest = k
-        state.systems_down += 1
     state.period = len(codes)
     mdp._set_category(state)
     return state

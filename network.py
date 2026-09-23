@@ -14,8 +14,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from dynaplex.modelling import DiscreteDist
-
 from mdp import SparePartsMDP
 
 HOURS_PER_PERIOD = 4
@@ -104,7 +102,6 @@ def mean_travel_periods(handling_hours: float = 3.0, speed_kmh: float = 450.0,
 def default_mdp(
     demands_per_week: float = 1.7,
     repair_mean_days: float = 20.0,
-    repair_sd_days: float = 10.0,
     repair_servers: int = 6,
     regional_base_stock: int = 1,
     ams_stock: int = 1,
@@ -118,18 +115,13 @@ def default_mdp(
     or how many parts the pool owns, and see what the policies make of it."""
     periods_per_day = 24 // HOURS_PER_PERIOD
     demand_prob = demands_per_week / (7 * periods_per_day)
-    # A two-moment fit starts at zero and a repair takes at least one period:
-    # fit the mean less one, then shift by one. Mean and SD come out as asked.
-    repair_time = DiscreteDist.adan_eenige_resing(
-        repair_mean_days * periods_per_day - 1, repair_sd_days * periods_per_day,
-    ).add(DiscreteDist.constant(1))
     total_weight = sum(loc.demand_weight for loc in LOCATIONS)
     return SparePartsMDP(
         n_stock_points=len(STOCK_POINTS),
         mean_travel_time=mean_travel_periods(handling_hours, speed_kmh, max_travel_periods),
         demand_prob=[demand_prob * loc.demand_weight / total_weight for loc in LOCATIONS],
         base_stock=[ams_stock] + [regional_base_stock] * (len(STOCK_POINTS) - 1),
-        repair_time=repair_time,
+        repair_mean=repair_mean_days * periods_per_day,
         repair_servers=repair_servers,
         loan_cost=loan_cost,
     )

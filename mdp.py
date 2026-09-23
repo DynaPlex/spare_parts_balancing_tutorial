@@ -24,11 +24,12 @@ Time. One period is a few hours (`network.py` says how many). Every period:
          unit it replaces starts its way back to AMS;
        - a failed unit that reaches AMS enters the repair shop.
   2. Repair. The shop has `repair_servers` parallel servers and a first-come
-     first-served queue. A repair time is drawn from `repair_time` — any
-     distribution — when the repair STARTS, and the part records the period it
-     will be finished. So the completion dates of the repairs in progress are
-     in the state: a policy may use the shop's outlook. (Drawing the time when
-     a part JOINS the queue would extend that outlook to the queue.)
+     first-served queue. Every busy server has, every period, the same fixed
+     probability 1 / `repair_mean` of finishing its repair, so repair times are
+     geometric, like travel times, and the state needs no clocks for them
+     either. This is not realistic: a repair that has been going on for weeks
+     is no closer to done than one that started today. We do it only to keep
+     the code simple and readable.
   3. Demand. With large probability nothing happens; otherwise one part fails,
      at a location drawn from `demand_prob`. The nearest stock point (smallest
      mean travel time; its own shelf first) with a part on hand ships one. If no stock point has a
@@ -88,7 +89,7 @@ class PartStatus(Enum):
     TO_CUSTOMER = auto()    # serviceable, travelling from `origin` to the down system at `dest`
     RETURNING = auto()      # failed, travelling from `origin` back to AMS
     REPAIR_QUEUE = auto()   # failed, at AMS, waiting for a free repair server
-    IN_REPAIR = auto()      # being repaired; serviceable at `repair_done_at`
+    IN_REPAIR = auto()      # being repaired at AMS
 
 
 @dataclass(slots=True)
@@ -96,7 +97,6 @@ class Part:
     status: PartStatus
     origin: int             # location where it is, or that it left
     dest: int               # location it travels to (travelling statuses only)
-    repair_done_at: int     # IN_REPAIR only
 
 
 @dataclass(slots=True)
@@ -132,19 +132,19 @@ class SparePartsMDP:
     demand_prob: ConstList[float]           # per location, per period
     base_stock: ConstList[int]              # [0] is the initial AMS stock
     repair_servers: int
+    repair_prob: float                      # per busy server, per period: chance the repair is done
     downtime_cost: float
     loan_cost: float
 
     # derived, for sampling:
     event_sampler: AliasSampler     # 0 = no demand this period, i + 1 = demand at location i
-    repair_sampler: AliasSampler
 
     num_actions: int
     horizon_type: HorizonType
 
     def __init__(self, n_stock_points: int, mean_travel_time: np.ndarray,
                  demand_prob: list[float], base_stock: list[int],
-                 repair_time: DiscreteDist, repair_servers: int,
+                 repair_mean: float, repair_servers: int,
                  downtime_cost: float = 1.0, loan_cost: float = 40.0):
         # some validations:
         n_locations = len(demand_prob)
@@ -154,17 +154,17 @@ class SparePartsMDP:
             raise ValueError("a shipment takes at least one period, also from the site's own shelf")
         if len(base_stock) != n_stock_points or min(base_stock) < 0:
             raise ValueError("base_stock needs one non-negative entry per stock point")
-        if repair_time.min() < 1:
-            raise ValueError("a repair takes at least one period")
+        if repair_mean < 1.0:
+            raise ValueError("a repair takes at least one period on average")
         total_demand_prob = sum(demand_prob)
         if min(demand_prob) < 0.0 or total_demand_prob >= 1.0:
             raise ValueError("demand_prob: probabilities per period, summing to less than 1")
         # The repair shop must keep up with the failures, or its queue will swallow the pool. 
-        load = total_demand_prob * repair_time.expectation() / repair_servers
+        load = total_demand_prob * repair_mean / repair_servers
         if load >= 1.0:
             raise ValueError(
                 f"unstable repair shop: {total_demand_prob:.4f} failures per period x "
-                f"{repair_time.expectation():.1f} periods per repair needs more than "
+                f"{repair_mean:.1f} periods per repair needs more than "
                 f"{repair_servers} servers (load {load:.2f}, must be below 1)")
 
         self.n_stock_points = n_stock_points
@@ -175,23 +175,22 @@ class SparePartsMDP:
         self.demand_prob = list(demand_prob)
         self.base_stock = list(base_stock)
         self.repair_servers = repair_servers
+        self.repair_prob = 1.0 / repair_mean
         self.downtime_cost = downtime_cost
         self.loan_cost = loan_cost
         self.event_sampler = DiscreteDist.custom(
             [1.0 - total_demand_prob] + list(demand_prob)).alias_sampler()
-        self.repair_sampler = repair_time.alias_sampler()
         self.num_actions = n_stock_points
         self.horizon_type = HorizonType.INFINITE
 
     # ---- helpers ----------------------------------------------------------
 
-    def _enter_repair_shop(self, state: State, context: TrajectoryContext, index: int) -> None:
+    def _enter_repair_shop(self, state: State, index: int) -> None:
         part = state.parts[index]
         part.origin = AMS
         if state.busy_servers < self.repair_servers:
             state.busy_servers += 1
             part.status = PartStatus.IN_REPAIR
-            part.repair_done_at = state.period + self.repair_sampler.sample(context.rng)
         else:
             part.status = PartStatus.REPAIR_QUEUE
             state.repair_queue.push_back(index)
@@ -257,7 +256,7 @@ class SparePartsMDP:
             stock_points.append(StockPoint(
                 on_hand=self.base_stock[k], inbound=0, open_orders=FifoQueue()))
             for _ in range(self.base_stock[k]):
-                parts.append(Part(status=PartStatus.STOCK, origin=k, dest=k, repair_done_at=0))
+                parts.append(Part(status=PartStatus.STOCK, origin=k, dest=k))
         return State(parts=parts, stock_points=stock_points, repair_queue=FifoQueue(),
                      busy_servers=0, systems_down=0, orders_open=0, period=0, holding=False,
                      category=StateCategory.AWAIT_EVENT)
@@ -297,15 +296,16 @@ class SparePartsMDP:
                     part.dest = AMS
             elif part.status == PartStatus.RETURNING:
                 if context.rng.random() < self.travel_prob[part.origin, part.dest]:
-                    self._enter_repair_shop(state, context, index)
+                    self._enter_repair_shop(state, index)
             elif part.status == PartStatus.IN_REPAIR:
-                if part.repair_done_at <= state.period:
+                # every busy server finishes with the same probability, every period
+                if context.rng.random() < self.repair_prob:
                     part.status = PartStatus.STOCK
                     state.stock_points[AMS].on_hand += 1
                     state.busy_servers -= 1
                     state.holding = False               # new supply ends a hold
                     if not state.repair_queue.is_empty():
-                        self._enter_repair_shop(state, context, state.repair_queue.pop_front())
+                        self._enter_repair_shop(state, state.repair_queue.pop_front())
 
         # 3. demand
         event = self.event_sampler.sample(context.rng)
@@ -390,7 +390,7 @@ class MostExposedFirst:
     """Cover the world: fill the open order of the stock point whose region
     suffers most from its absence (`SparePartsMDP.exposure`) — but keep
     `reserve` parts in AMS. A one-line idea that beats first-come first-served
-    by about a tenth; the challenge for a trained policy is to beat this."""
+    by close to a tenth; the challenge for a trained policy is to beat this."""
 
     mdp: SparePartsMDP
     reserve: int = 1

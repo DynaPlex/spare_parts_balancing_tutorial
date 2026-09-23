@@ -5,8 +5,8 @@ over the state; DynaPlex compiles it, like the model.
 Guidance for the tutorial: the network can only learn from what is written
 here. The features below cover the three things a good allocation depends on:
 where the stock is (and is about to be), where the demand is uncovered, and
-what the repair shop will deliver soon. Add to them, drop some, retrain, and
-see what changes.
+how busy the repair shop is. Add to them, drop some, retrain, and see what
+changes.
 """
 from dataclasses import dataclass
 from typing import Final
@@ -34,11 +34,7 @@ class SparePartsFeaturizer(Featurizer):
             # modification inside a featurizer. Lengths and is_empty() are fine.)
             self.v.append(self.mdp.exposure(state, k) * 100.0)
 
-        # The repair shop's outlook: how many parts come out within 1, 2, 4, 8 days.
-        self.v.append(float(self.due_within(state, 6)))
-        self.v.append(float(self.due_within(state, 12)))
-        self.v.append(float(self.due_within(state, 24)))
-        self.v.append(float(self.due_within(state, 48)))
+        # The repair shop: parts being repaired come out at a fixed rate each.
         self.v.append(float(len(state.repair_queue)))
         self.v.append(float(state.busy_servers))
 
@@ -50,11 +46,3 @@ class SparePartsFeaturizer(Featurizer):
         self.v.append(float(returning))
         self.v.append(float(state.systems_down))
         self.v.append(float(state.stock_points[AMS].on_hand))
-
-    def due_within(self, state: State, periods: int) -> int:
-        """Repairs that complete within `periods` from now."""
-        due = 0
-        for part in state.parts:
-            if part.status == PartStatus.IN_REPAIR and part.repair_done_at <= state.period + periods:
-                due += 1
-        return due

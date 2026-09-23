@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import dynaplex
-from dynaplex.modelling import DiscreteDist, StateCategory, new_context, probe_state
+from dynaplex.modelling import StateCategory, new_context, probe_state
 
 from featurizer import SparePartsFeaturizer
 from mdp import AMS, EmptiestFirst, FirstComeFirstServed, MostExposedFirst, PartStatus, SparePartsMDP
@@ -87,7 +87,7 @@ def tiny_mdp(demand_at: str, stock_at: list[str]) -> SparePartsMDP:
         n_stock_points=3, mean_travel_time=travel,
         demand_prob=[0.1 if c == demand_at else 0.0 for c in codes],
         base_stock=[1 if c in stock_at else 0 for c in codes],
-        repair_time=DiscreteDist.constant(10), repair_servers=2)
+        repair_mean=10.0, repair_servers=2)
 
 
 def first_demand(mdp):

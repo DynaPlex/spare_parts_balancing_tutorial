@@ -21,7 +21,8 @@ replacement, and the orders queue up in Amsterdam. Every time a repair
 completes, the shop asks: which open order do we fill first? The textbook
 answer is first come, first served. But a part sent to Singapore is out of
 service for a day and a half, Miami's region has no other station nearby, and
-the shop knows which repairs finish tomorrow. There is room to be smarter, and
+a shop with five parts in repair will release the next one soon. There is room
+to be smarter, and
 that is the room a trained policy has to find.
 
 What it costs: one per period (four hours) for every system that is down,
@@ -60,7 +61,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 - **FirstComeFirstServed**: fill the oldest order. The textbook rule.
 - **EmptiestFirst**: fill the station with the least stock on hand or on its way, but keep a reserve in Amsterdam.
-- **MostExposedFirst**: fill the station whose region suffers most from its absence, counting demand and the extra travel from the nearest station that does have a part. Keeps a reserve too. The best hand-written rule here, about a tenth cheaper than first come, first served.
+- **MostExposedFirst**: fill the station whose region suffers most from its absence, counting demand and the extra travel from the nearest station that does have a part. Keeps a reserve too. The best hand-written rule here, close to a tenth cheaper than first come, first served.
 - **Trained**: whatever `train.py` learns, starting from the rollouts of one of the above.
 
 Things to try during or after the tutorial: change the features, change the

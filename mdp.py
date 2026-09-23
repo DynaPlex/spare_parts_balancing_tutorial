@@ -268,30 +268,36 @@ class SparePartsMDP:
     def modify_state_with_event(self, state: State, context: TrajectoryContext) -> None:
         state.period += 1
 
-        # 1 + 2. travel, and the repairs in progress: one pass over the parts
+        # 1 + 2. travel, and the repairs in progress: one pass over the parts.
+        # Every part draws one random number every period, whether it needs one or
+        # not, so that a period always consumes the same number of draws whatever
+        # the state: rollouts from the same seed then see the same failures and the
+        # same travel and repair luck regardless of the decision taken (common
+        # random numbers), and comparisons between decisions are far less noisy.
         for index in range(self.n_parts):
             part = state.parts[index]
+            u = context.rng.random()
             if part.status == PartStatus.OUTBOUND:
-                if context.rng.random() < self.travel_prob[part.origin, part.dest]:
+                if u < self.travel_prob[part.origin, part.dest]:
                     part.status = PartStatus.STOCK
                     part.origin = part.dest
                     state.stock_points[part.dest].inbound -= 1
                     state.stock_points[part.dest].on_hand += 1
             elif part.status == PartStatus.TO_CUSTOMER:
-                if context.rng.random() < self.travel_prob[part.origin, part.dest]:
+                if u < self.travel_prob[part.origin, part.dest]:
                     # installed; from here on this slot is the failed unit it replaced
                     state.systems_down -= 1
                     part.status = PartStatus.RETURNING
                     part.origin = part.dest
                     part.dest = AMS
             elif part.status == PartStatus.RETURNING:
-                if context.rng.random() < self.travel_prob[part.origin, part.dest]:
+                if u < self.travel_prob[part.origin, part.dest]:
                     part.status = PartStatus.REPAIR_QUEUE
                     part.origin = AMS
                     state.queued += 1
             elif part.status == PartStatus.IN_REPAIR:
                 # every busy server finishes with the same probability, every period
-                if context.rng.random() < self.repair_prob:
+                if u < self.repair_prob:
                     part.status = PartStatus.STOCK
                     state.stock_points[AMS].on_hand += 1
                     state.busy_servers -= 1

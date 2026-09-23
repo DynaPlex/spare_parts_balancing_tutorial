@@ -113,6 +113,7 @@ class State:
     repair_queue: FifoQueue     # indices into `parts`, first come first served
     busy_servers: int
     systems_down: int           # TO_CUSTOMER parts: systems waiting for one
+    orders_open: int            # unfilled orders, over all stock points
     period: int
     holding: bool               # the last decision was to hold; cleared when something changes
     category: StateCategory
@@ -219,11 +220,8 @@ class SparePartsMDP:
     def _set_category(self, state: State) -> None:
         """An allocation decision is due when AMS has a part, somebody has an
         order open, and we are not inside a hold."""
-        state.category = StateCategory.AWAIT_EVENT
-        if state.stock_points[AMS].on_hand > 0 and not state.holding:
-            for k in range(1, self.n_stock_points):
-                if not state.stock_points[k].open_orders.is_empty():
-                    state.category = StateCategory.AWAIT_ACTION
+        decision_due = state.stock_points[AMS].on_hand > 0 and state.orders_open > 0 and not state.holding
+        state.category = StateCategory.AWAIT_ACTION if decision_due else StateCategory.AWAIT_EVENT
 
     def exposure(self, state: State, k: int) -> float:
         """How much stock point `k` is missed right now: the expected extra travel
@@ -261,7 +259,7 @@ class SparePartsMDP:
             for _ in range(self.base_stock[k]):
                 parts.append(Part(status=PartStatus.STOCK, origin=k, dest=k, repair_done_at=0))
         return State(parts=parts, stock_points=stock_points, repair_queue=FifoQueue(),
-                     busy_servers=0, systems_down=0, period=0, holding=False,
+                     busy_servers=0, systems_down=0, orders_open=0, period=0, holding=False,
                      category=StateCategory.AWAIT_EVENT)
 
     def modify_state_with_action(self, state: State, context: TrajectoryContext,
@@ -275,6 +273,7 @@ class SparePartsMDP:
             destination = state.stock_points[action]
             destination.inbound += 1
             destination.open_orders.pop_front()
+            state.orders_open -= 1
         self._set_category(state)
 
     def modify_state_with_event(self, state: State, context: TrajectoryContext) -> None:
@@ -322,6 +321,7 @@ class SparePartsMDP:
                 state.systems_down += 1
                 if k != AMS:
                     state.stock_points[k].open_orders.push_back(state.period)
+                    state.orders_open += 1
                     state.holding = False               # a new order ends a hold
 
         # 4. cost

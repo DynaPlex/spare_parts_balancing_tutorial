@@ -70,6 +70,7 @@ def test_counts_mirror_the_parts_throughout_a_long_run():
             if k != AMS:
                 assert point.on_hand + point.inbound + len(point.open_orders) == mdp.base_stock[k]
         assert state.systems_down == by_status[PartStatus.TO_CUSTOMER]
+        assert state.orders_open == sum(len(point.open_orders) for point in state.stock_points)
         assert state.busy_servers == by_status[PartStatus.IN_REPAIR] <= mdp.repair_servers
         assert len(state.repair_queue) == by_status[PartStatus.REPAIR_QUEUE]
         if by_status[PartStatus.REPAIR_QUEUE] > 0:
@@ -138,14 +139,13 @@ def test_holding_postpones_the_question_until_something_changes():
     state = probe_state(mdp, seed=5)
     mdp.modify_state_with_action(state, context, 0)
     assert state.holding and state.category == StateCategory.AWAIT_EVENT
-    orders_before = sum(len(point.open_orders) for point in state.stock_points)
+    orders_before = state.orders_open
     ams_before = state.stock_points[AMS].on_hand
     while state.category == StateCategory.AWAIT_EVENT:
         mdp.modify_state_with_event(state, context)
     # The question is back only because an order opened or a repair completed.
-    orders_now = sum(len(point.open_orders) for point in state.stock_points)
     assert not state.holding
-    assert orders_now > orders_before or state.stock_points[AMS].on_hand > ams_before
+    assert state.orders_open > orders_before or state.stock_points[AMS].on_hand > ams_before
 
 
 # ---- the hand-written policies ----------------------------------------------
@@ -158,6 +158,7 @@ def with_open_orders(mdp, codes: list[str]):
         k = CODE[code]
         state.stock_points[k].on_hand = 0
         state.stock_points[k].open_orders.push_back(age)
+        state.orders_open += 1
         state.parts[k].status = PartStatus.TO_CUSTOMER
         state.parts[k].dest = k
         state.systems_down += 1

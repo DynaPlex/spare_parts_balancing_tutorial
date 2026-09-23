@@ -48,7 +48,7 @@ class SparePartsFeaturizer(Featurizer):
             if part.status == PartStatus.RETURNING:
                 returning += 1
         self.v.append(float(returning))
-        self.v.append(float(self.mdp.systems_down(state)))
+        self.v.append(float(state.systems_down))
         self.v.append(float(state.stock_points[AMS].on_hand))
 
     def due_within(self, state: State, periods: int) -> int:

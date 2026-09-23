@@ -112,6 +112,7 @@ class State:
     stock_points: list[StockPoint]
     repair_queue: FifoQueue     # indices into `parts`, first come first served
     busy_servers: int
+    systems_down: int           # TO_CUSTOMER parts: systems waiting for one
     period: int
     holding: bool               # the last decision was to hold; cleared when something changes
     category: StateCategory
@@ -144,6 +145,7 @@ class SparePartsMDP:
                  demand_prob: list[float], base_stock: list[int],
                  repair_time: DiscreteDist, repair_servers: int,
                  downtime_cost: float = 1.0, loan_cost: float = 40.0):
+        # some validations:
         n_locations = len(demand_prob)
         if mean_travel_time.shape != (n_locations, n_locations):
             raise ValueError("mean_travel_time must be n_locations x n_locations")
@@ -156,7 +158,7 @@ class SparePartsMDP:
         total_demand_prob = sum(demand_prob)
         if min(demand_prob) < 0.0 or total_demand_prob >= 1.0:
             raise ValueError("demand_prob: probabilities per period, summing to less than 1")
-        # The repair shop must keep up with the failures, or its queue swallows the pool.
+        # The repair shop must keep up with the failures, or its queue will swallow the pool. 
         load = total_demand_prob * repair_time.expectation() / repair_servers
         if load >= 1.0:
             raise ValueError(
@@ -223,14 +225,6 @@ class SparePartsMDP:
                 if not state.stock_points[k].open_orders.is_empty():
                     state.category = StateCategory.AWAIT_ACTION
 
-    def systems_down(self, state: State) -> int:
-        """Systems waiting for a part: the parts on their way to one."""
-        down = 0
-        for part in state.parts:
-            if part.status == PartStatus.TO_CUSTOMER:
-                down += 1
-        return down
-
     def exposure(self, state: State, k: int) -> float:
         """How much stock point `k` is missed right now: the expected extra travel
         per period (demand probability x extra periods, summed over the world)
@@ -267,7 +261,7 @@ class SparePartsMDP:
             for _ in range(self.base_stock[k]):
                 parts.append(Part(status=PartStatus.STOCK, origin=k, dest=k, repair_done_at=0))
         return State(parts=parts, stock_points=stock_points, repair_queue=FifoQueue(),
-                     busy_servers=0, period=0, holding=False,
+                     busy_servers=0, systems_down=0, period=0, holding=False,
                      category=StateCategory.AWAIT_EVENT)
 
     def modify_state_with_action(self, state: State, context: TrajectoryContext,
@@ -298,6 +292,7 @@ class SparePartsMDP:
             elif part.status == PartStatus.TO_CUSTOMER:
                 if context.rng.random() < self.travel_prob[part.origin, part.dest]:
                     # installed; from here on this slot is the failed unit it replaced
+                    state.systems_down -= 1
                     part.status = PartStatus.RETURNING
                     part.origin = part.dest
                     part.dest = AMS
@@ -324,12 +319,13 @@ class SparePartsMDP:
                 shipped = state.parts[self._take_from_stock(state, k)]
                 shipped.status = PartStatus.TO_CUSTOMER
                 shipped.dest = location
+                state.systems_down += 1
                 if k != AMS:
                     state.stock_points[k].open_orders.push_back(state.period)
                     state.holding = False               # a new order ends a hold
 
         # 4. cost
-        context.cumulative_cost += self.downtime_cost * self.systems_down(state)
+        context.cumulative_cost += self.downtime_cost * state.systems_down
         context.time_elapsed += 1
         self._set_category(state)
 

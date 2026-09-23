@@ -69,6 +69,7 @@ def test_counts_mirror_the_parts_throughout_a_long_run():
             assert point.on_hand == on_hand and point.inbound == inbound
             if k != AMS:
                 assert point.on_hand + point.inbound + len(point.open_orders) == mdp.base_stock[k]
+        assert state.systems_down == by_status[PartStatus.TO_CUSTOMER]
         assert state.busy_servers == by_status[PartStatus.IN_REPAIR] <= mdp.repair_servers
         assert len(state.repair_queue) == by_status[PartStatus.REPAIR_QUEUE]
         if by_status[PartStatus.REPAIR_QUEUE] > 0:
@@ -99,7 +100,7 @@ def first_demand(mdp):
 def test_failure_at_a_stocked_site_is_served_from_its_own_shelf():
     mdp = tiny_mdp(demand_at="CDG", stock_at=["AMS", "CDG"])
     state = first_demand(mdp)
-    assert mdp.systems_down(state) == 1
+    assert state.systems_down == 1
     shipped = [p for p in state.parts if p.status == PartStatus.TO_CUSTOMER]
     assert len(shipped) == 1 and shipped[0].origin == CODE["CDG"] == shipped[0].dest
     orders = state.stock_points[CODE["CDG"]].open_orders
@@ -123,7 +124,7 @@ def test_installed_part_comes_back_to_the_shop_as_a_failed_unit():
 def test_failure_at_an_unstocked_site_waits_for_the_nearest_part():
     mdp = tiny_mdp(demand_at="MIA", stock_at=["AMS", "CDG"])
     state = first_demand(mdp)
-    assert mdp.systems_down(state) == 1
+    assert state.systems_down == 1
     travelling = [p for p in state.parts if p.status == PartStatus.TO_CUSTOMER]
     assert len(travelling) == 1 and travelling[0].dest == CODE["MIA"]
     assert travelling[0].origin in (AMS, CODE["CDG"])         # both are 5 periods from Miami
@@ -159,6 +160,7 @@ def with_open_orders(mdp, codes: list[str]):
         state.stock_points[k].open_orders.push_back(age)
         state.parts[k].status = PartStatus.TO_CUSTOMER
         state.parts[k].dest = k
+        state.systems_down += 1
     state.period = len(codes)
     mdp._set_category(state)
     return state

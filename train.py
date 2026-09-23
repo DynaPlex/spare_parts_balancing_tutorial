@@ -3,15 +3,13 @@ generation: from every state a hand-written base policy would visit, try each
 allowed action, roll the base policy out from there, and let the network learn
 which action led to the lowest cost. Then compare.
 
-    python train.py                     # from MostExposedFirst; about a minute on a laptop
-    python train.py --base fcfs         # from the textbook rule
+    python train.py                     # from the textbook rule; about a minute on a laptop
     python train.py --samples 16000     # more samples, better (and slower)
 
-With the defaults the trained policy beats MostExposedFirst, the best
-hand-written rule, by about one percent. Two things make that possible:
-paired rollouts (the model draws its random numbers so that every candidate
-action sees the same failures) and soft labels (near-ties between actions
-become near-equal targets instead of coin flips).
+Two things make the labels usable here: paired rollouts (the model draws its
+random numbers so that every candidate action sees the same failures) and
+soft labels (near-ties between actions become near-equal targets instead of
+coin flips).
 
 The trained policy is written to agents/trained, where compare.py and
 watch.py --policy trained pick it up. Runs resume: the samples and agents land
@@ -25,18 +23,13 @@ import time
 import dynaplex
 
 from featurizer import SparePartsFeaturizer
-from mdp import FirstComeFirstServed, MostExposedFirst
+from mdp import FirstComeFirstServed
 from network import default_mdp
 
-BASE_POLICIES = {
-    "exposed": lambda mdp: MostExposedFirst(mdp, reserve=1),
-    "fcfs": lambda mdp: FirstComeFirstServed(mdp),
-}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--base", choices=BASE_POLICIES, default="exposed", help="the policy to improve on")
     parser.add_argument("--samples", type=int, default=8000, help="labelled decision states (n)")
     parser.add_argument("--rollouts", type=int, default=256, help="rollouts per candidate action (m)")
     parser.add_argument("--horizon", type=int, default=540, help="rollout length in periods (90 days)")
@@ -47,7 +40,7 @@ def main() -> None:
     args = parser.parse_args()
 
     mdp = default_mdp()
-    base = BASE_POLICIES[args.base](mdp)
+    base = FirstComeFirstServed(mdp)
     dcl = dynaplex.DCL(
         mdp, base, features=SparePartsFeaturizer,
         n=args.samples, m=args.rollouts, h=args.horizon,
@@ -65,7 +58,6 @@ def main() -> None:
                                        horizon=9000, seed=0, checks=False)
     print(comparer.compare({
         "FirstComeFirstServed": FirstComeFirstServed(mdp),
-        "MostExposedFirst(reserve=1)": MostExposedFirst(mdp, reserve=1),
         **{f"Trained (generation {a.info['generation']})": a for a in agents},
     }))
 

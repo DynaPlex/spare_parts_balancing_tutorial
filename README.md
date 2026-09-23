@@ -36,8 +36,8 @@ Requires **Python 3.11–3.14** on Windows, macOS or Linux.
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest          # the model's own checks (a few seconds)
-.venv/bin/python watch.py           # a window: watch the best hand-written rule run
-.venv/bin/python compare.py         # the hand-written rules on cost (about 10 s)
+.venv/bin/python watch.py           # a window: watch the textbook rule run
+.venv/bin/python compare.py         # the policies on cost, paired
 .venv/bin/python train.py           # train a policy with DCL (about a minute), then compare
 .venv/bin/python watch.py --policy trained
 ```
@@ -49,21 +49,21 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 | File | What it is |
 |---|---|
-| `mdp.py` | **The model**: parts, stations, the repair shop, one period of time, the allocation decision, and the hand-written policies. Start here. |
+| `mdp.py` | **The model**: parts, stations, the repair shop, one period of time, the allocation decision, and the textbook policy. Start here. |
 | `network.py` | The map (invented network, real cities), travel times, and `default_mdp()`, the configuration every script uses. Ordinary Python: change any number. |
 | `featurizer.py` | What the neural network sees: the numbers written from a state. |
 | `test_mdp.py` | Readable checks of the model, on hand-built situations. |
 | `watch.py` | Animated map of any policy running the network. |
 | `compare.py` | All policies on the same random failures and repair times, with paired differences. |
-| `train.py` | One generation of Deep Controlled Learning from a hand-written policy; saves `agents/trained`. |
+| `train.py` | One generation of Deep Controlled Learning from the textbook rule; saves `agents/trained`. |
 
 ## The policies
 
-- **FirstComeFirstServed**: fill the oldest order. The textbook rule.
-- **EmptiestFirst**: fill the station with the least stock on hand or on its way, but keep a reserve in Amsterdam.
-- **MostExposedFirst**: fill the station whose region suffers most from its absence, counting demand and the extra travel from the nearest station that does have a part. Keeps a reserve too. The best hand-written rule here, close to a tenth cheaper than first come, first served.
-- **Trained**: whatever `train.py` learns, starting from the rollouts of one of the above. From MostExposedFirst it comes out about one percent cheaper than its teacher.
+- **FirstComeFirstServed**: fill the oldest order. The textbook rule, and the only hand-written policy here.
+- **Trained**: whatever `train.py` learns from the textbook rule's rollouts. Considerably cheaper.
 
-Things to try during or after the tutorial: change the features, change the
-network size, start the training from the textbook rule instead, give
-Amsterdam two parts, make the repair shop slower, and see what each does.
+The challenge: watch the trained policy, work out what it does differently,
+and write that down as a rule of your own next to `FirstComeFirstServed`.
+How close can an explainable rule get? Other things to try: change the
+features, change the network size, give Amsterdam two parts, make the repair
+shop slower, and see what each does.

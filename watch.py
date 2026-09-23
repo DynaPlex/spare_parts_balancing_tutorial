@@ -1,8 +1,7 @@
 """Watch a policy run the network: a map with the parts moving, the systems
 that are down, and the shop repairing, one frame per period.
 
-    python watch.py                        # MostExposedFirst, the best hand-written rule
-    python watch.py --policy fcfs          # the textbook rule
+    python watch.py                        # the textbook rule
     python watch.py --policy trained       # after train.py
     python watch.py --fps 20 --periods 6000
 
@@ -20,7 +19,7 @@ from matplotlib.animation import FuncAnimation
 
 from dynaplex.modelling import StateCategory, new_context
 
-from mdp import AMS, EmptiestFirst, FirstComeFirstServed, MostExposedFirst, PartStatus
+from mdp import AMS, FirstComeFirstServed, PartStatus
 from network import HOURS_PER_PERIOD, LOCATIONS, STOCK_POINTS, default_mdp
 
 PERIODS_PER_DAY = 24 // HOURS_PER_PERIOD
@@ -40,10 +39,6 @@ def make_policy(name: str, mdp, context):
     """A function state -> action, whichever kind of policy is asked for."""
     if name == "fcfs":
         return FirstComeFirstServed(mdp).get_action
-    if name == "exposed":
-        return MostExposedFirst(mdp, reserve=1).get_action
-    if name == "emptiest":
-        return EmptiestFirst(mdp, reserve=1).get_action
     if name == "random":
         import dynaplex
         random_policy = dynaplex.RandomPolicy(mdp)
@@ -145,7 +140,7 @@ def draw(ax, run: Run, policy_name: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--policy", choices=["exposed", "fcfs", "emptiest", "random", "trained"], default="exposed")
+    parser.add_argument("--policy", choices=["fcfs", "random", "trained"], default="fcfs")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--periods", type=int, default=3000, help="periods to show (500 days)")
     parser.add_argument("--fps", type=float, default=10.0)

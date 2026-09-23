@@ -213,30 +213,6 @@ class SparePartsMDP:
         decision_due = state.stock_points[AMS].on_hand > 0 and state.orders_open > 0 and not state.holding
         state.category = StateCategory.AWAIT_ACTION if decision_due else StateCategory.AWAIT_EVENT
 
-    def exposure(self, state: State, k: int) -> float:
-        """How much stock point `k` is missed right now: the expected extra travel
-        per period (demand probability x extra periods, summed over the world)
-        that failures suffer because `k` has nothing on hand or on its way, and
-        are served from the nearest stock point that does. 0 if `k` is covered.
-        A part that nobody can supply counts as a loan-length wait."""
-        own = state.stock_points[k]
-        if own.on_hand + own.inbound > 0:
-            return 0.0
-        total = 0.0
-        for loc in range(self.n_locations):
-            covered = -1.0
-            for j in range(self.n_stock_points):
-                point = state.stock_points[j]
-                if point.on_hand + point.inbound > 0 and (
-                        covered < 0.0 or self.mean_travel[j, loc] < covered):
-                    covered = self.mean_travel[j, loc]
-            if covered < 0.0:
-                covered = self.loan_cost / self.downtime_cost
-            extra = covered - self.mean_travel[k, loc]
-            if extra > 0.0:
-                total += self.demand_prob[loc] * extra
-        return total
-
     # ---- MDP contract -----------------------------------------------------
 
     def get_initial_state(self, context: TrajectoryContext) -> State:
@@ -339,21 +315,17 @@ class SparePartsMDP:
             valid.set(k, not state.stock_points[k].open_orders.is_empty())
 
 
-# ---- hand-written allocation policies ---------------------------------------
+# ---- the hand-written allocation policy -------------------------------------
 
 
 # @policy
 @const_dataclass(slots=True)
 class FirstComeFirstServed:
-    """The textbook rule: fill the oldest open order. Never holds — unless
-    asked to keep `reserve` parts in AMS (0 by default)."""
+    """The textbook rule: fill the oldest open order. Never holds."""
 
     mdp: SparePartsMDP
-    reserve: int = 0
 
     def get_action(self, state: State) -> int:
-        if state.stock_points[AMS].on_hand <= self.reserve:
-            return 0
         best = 0
         oldest = state.period + 1
         for k in range(1, self.mdp.n_stock_points):
@@ -361,57 +333,4 @@ class FirstComeFirstServed:
             if not point.open_orders.is_empty() and point.open_orders[0] < oldest:
                 best = k
                 oldest = point.open_orders[0]
-        return best
-
-
-# @policy
-@const_dataclass(slots=True)
-class EmptiestFirst:
-    """Send to the stock point with the least stock on hand or on its way
-    (ties: the older order) — but keep `reserve` parts in AMS, which can reach
-    any site in the world."""
-
-    mdp: SparePartsMDP
-    reserve: int = 1
-
-    def get_action(self, state: State) -> int:
-        if state.stock_points[AMS].on_hand <= self.reserve:
-            return 0
-        best = 0
-        least = self.mdp.n_parts + 1
-        oldest = state.period + 1
-        for k in range(1, self.mdp.n_stock_points):
-            point = state.stock_points[k]
-            if not point.open_orders.is_empty():
-                position = point.on_hand + point.inbound
-                order = point.open_orders[0]
-                if position < least or (position == least and order < oldest):
-                    best = k
-                    least = position
-                    oldest = order
-        return best
-
-
-# @policy
-@const_dataclass(slots=True)
-class MostExposedFirst:
-    """Cover the world: fill the open order of the stock point whose region
-    suffers most from its absence (`SparePartsMDP.exposure`) — but keep
-    `reserve` parts in AMS. A one-line idea that beats first-come first-served
-    by close to a tenth; the challenge for a trained policy is to beat this."""
-
-    mdp: SparePartsMDP
-    reserve: int = 1
-
-    def get_action(self, state: State) -> int:
-        if state.stock_points[AMS].on_hand <= self.reserve:
-            return 0
-        best = 0
-        most = -1.0
-        for k in range(1, self.mdp.n_stock_points):
-            if not state.stock_points[k].open_orders.is_empty():
-                exposure = self.mdp.exposure(state, k)
-                if exposure > most:
-                    best = k
-                    most = exposure
         return best

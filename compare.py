@@ -1,7 +1,7 @@
 """Compare the policies on cost, on common random numbers: every policy sees
 the same failures and the same repair times, so the differences are paired.
 
-    python compare.py                  # the hand-written policies (about 10 s)
+    python compare.py                  # the textbook rule, random, and the trained policy
     python compare.py --trajectories 2048
 
 A trained policy (see train.py) is included automatically when agents/trained
@@ -12,7 +12,7 @@ import os
 
 import dynaplex
 
-from mdp import EmptiestFirst, FirstComeFirstServed, MostExposedFirst
+from mdp import FirstComeFirstServed
 from network import default_mdp
 
 TRAINED_AGENT = os.path.join("agents", "trained")
@@ -22,10 +22,6 @@ def policies(mdp) -> dict:
     result = {
         "FirstComeFirstServed": FirstComeFirstServed(mdp),
         "Random": dynaplex.RandomPolicy(mdp),
-        "FirstComeFirstServed(reserve=1)": FirstComeFirstServed(mdp, reserve=1),
-        "EmptiestFirst(reserve=1)": EmptiestFirst(mdp, reserve=1),
-        "MostExposedFirst(reserve=0)": MostExposedFirst(mdp, reserve=0),
-        "MostExposedFirst(reserve=1)": MostExposedFirst(mdp, reserve=1),
     }
     if os.path.isdir(TRAINED_AGENT):
         result["Trained"] = dynaplex.NNAgent.load(TRAINED_AGENT)

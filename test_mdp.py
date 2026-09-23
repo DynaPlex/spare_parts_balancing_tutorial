@@ -1,5 +1,5 @@
 """Readable checks of the model: the map, the initial state, the accounting
-identity, fulfilment from the nearest shelf, holding, and the policies
+identity, fulfilment from the nearest shelf, holding, and the textbook policy
 on hand-built situations. Run with `python -m pytest`."""
 import numpy as np
 import pytest
@@ -8,7 +8,7 @@ import dynaplex
 from dynaplex.modelling import StateCategory, new_context, probe_state
 
 from featurizer import SparePartsFeaturizer
-from mdp import AMS, EmptiestFirst, FirstComeFirstServed, MostExposedFirst, PartStatus, SparePartsMDP
+from mdp import AMS, FirstComeFirstServed, PartStatus, SparePartsMDP
 from network import LOCATIONS, STOCK_POINTS, default_mdp, mean_travel_periods
 
 CODE = {loc.code: i for i, loc in enumerate(LOCATIONS)}
@@ -175,30 +175,10 @@ def test_first_come_first_served_fills_the_oldest_order():
     assert FirstComeFirstServed(mdp).get_action(state) == CODE["CDG"]
 
 
-def test_most_exposed_first_prefers_the_region_without_a_backup():
-    mdp = default_mdp()
-    state = with_open_orders(mdp, ["CDG", "MIA"])
-    # Paris is next door to Amsterdam; Miami's region would be served from
-    # Amsterdam across the ocean. Miami is the bigger loss, whatever the order age.
-    assert mdp.exposure(state, CODE["MIA"]) > mdp.exposure(state, CODE["CDG"]) > 0.0
-    assert MostExposedFirst(mdp, reserve=0).get_action(state) == CODE["MIA"]
-    assert mdp.exposure(state, CODE["DXB"]) == 0.0           # Dubai still has its part
-
-
-def test_reserve_keeps_the_last_part_in_amsterdam():
-    mdp = default_mdp()
-    state = with_open_orders(mdp, ["MIA"])
-    assert state.stock_points[AMS].on_hand == 1
-    assert MostExposedFirst(mdp, reserve=1).get_action(state) == 0
-    assert EmptiestFirst(mdp, reserve=1).get_action(state) == 0
-    assert FirstComeFirstServed(mdp, reserve=1).get_action(state) == 0
-    assert MostExposedFirst(mdp, reserve=0).get_action(state) == CODE["MIA"]
-
-
 # ---- DynaPlex's own checks ---------------------------------------------------
 
 def test_model_passes_the_dynaplex_checks_with_the_featurizer():
     mdp = default_mdp()
-    report = dynaplex.check_mdp(mdp, MostExposedFirst(mdp), features=SparePartsFeaturizer,
+    report = dynaplex.check_mdp(mdp, FirstComeFirstServed(mdp), features=SparePartsFeaturizer,
                                 seeds=8, periods=2000, relax_program_flow=True)
     assert report.decisions > 0 and report.feature_rows > 0

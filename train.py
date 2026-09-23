@@ -35,8 +35,8 @@ def main() -> None:
     parser.add_argument("--rollouts", type=int, default=64, help="rollouts per candidate action (m)")
     parser.add_argument("--horizon", type=int, default=360, help="rollout length in periods (60 days)")
     parser.add_argument("--generations", type=int, default=1)
-    parser.add_argument("--loss", choices=["ce", "soft_ce", "count_ce"], default="ce",
-                        help="ce = the winning action; soft_ce = near-ties get near-equal targets")
+    parser.add_argument("--loss", choices=["soft_ce", "ce", "count_ce"], default="soft_ce",
+                        help="soft_ce = near-ties get near-equal targets; ce = the winning action only")
     parser.add_argument("--out", default=os.path.join("agents", "trained"))
     args = parser.parse_args()
 

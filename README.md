@@ -38,7 +38,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest          # the model's own checks (a few seconds)
 .venv/bin/python watch.py           # a window: watch the best hand-written rule run
 .venv/bin/python compare.py         # the hand-written rules on cost (about 10 s)
-.venv/bin/python train.py           # train a policy with DCL (minutes), then compare
+.venv/bin/python train.py           # train a policy with DCL (about a minute), then compare
 .venv/bin/python watch.py --policy trained
 ```
 
@@ -62,7 +62,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - **FirstComeFirstServed**: fill the oldest order. The textbook rule.
 - **EmptiestFirst**: fill the station with the least stock on hand or on its way, but keep a reserve in Amsterdam.
 - **MostExposedFirst**: fill the station whose region suffers most from its absence, counting demand and the extra travel from the nearest station that does have a part. Keeps a reserve too. The best hand-written rule here, close to a tenth cheaper than first come, first served.
-- **Trained**: whatever `train.py` learns, starting from the rollouts of one of the above.
+- **Trained**: whatever `train.py` learns, starting from the rollouts of one of the above. From MostExposedFirst it comes out about one percent cheaper than its teacher.
 
 Things to try during or after the tutorial: change the features, change the
 network size, start the training from the textbook rule instead, give

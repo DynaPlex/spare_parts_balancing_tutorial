@@ -22,6 +22,7 @@ def policies(mdp) -> dict:
     result = {
         "FirstComeFirstServed": FirstComeFirstServed(mdp),
         "Random": dynaplex.RandomPolicy(mdp),
+        "FirstComeFirstServed(reserve=1)": FirstComeFirstServed(mdp, reserve=1),
         "EmptiestFirst(reserve=1)": EmptiestFirst(mdp, reserve=1),
         "MostExposedFirst(reserve=0)": MostExposedFirst(mdp, reserve=0),
         "MostExposedFirst(reserve=1)": MostExposedFirst(mdp, reserve=1),

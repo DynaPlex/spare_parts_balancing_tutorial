@@ -191,6 +191,7 @@ def test_reserve_keeps_the_last_part_in_amsterdam():
     assert state.stock_points[AMS].on_hand == 1
     assert MostExposedFirst(mdp, reserve=1).get_action(state) == 0
     assert EmptiestFirst(mdp, reserve=1).get_action(state) == 0
+    assert FirstComeFirstServed(mdp, reserve=1).get_action(state) == 0
     assert MostExposedFirst(mdp, reserve=0).get_action(state) == CODE["MIA"]
 
 

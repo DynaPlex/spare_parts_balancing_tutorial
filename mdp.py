@@ -345,11 +345,15 @@ class SparePartsMDP:
 # @policy
 @const_dataclass(slots=True)
 class FirstComeFirstServed:
-    """The textbook rule: fill the oldest open order. Never holds."""
+    """The textbook rule: fill the oldest open order. Never holds — unless
+    asked to keep `reserve` parts in AMS (0 by default)."""
 
     mdp: SparePartsMDP
+    reserve: int = 0
 
     def get_action(self, state: State) -> int:
+        if state.stock_points[AMS].on_hand <= self.reserve:
+            return 0
         best = 0
         oldest = state.period + 1
         for k in range(1, self.mdp.n_stock_points):

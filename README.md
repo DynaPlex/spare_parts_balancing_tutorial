@@ -18,10 +18,10 @@ down until a serviceable part is installed.
   also the repair shop. The other 25 sites hold nothing. The pool starts on the
   shelf in Amsterdam, and the first decisions position it.
 - **Fulfilment.** A failure is served from the nearest stock point that has a
-  part on hand, its own shelf first. The part travels there (one period from
-  the own shelf, up to ten across the world), is installed, and the failed unit
-  travels back to Amsterdam for repair. If no stock point has a part, one is
-  borrowed at a fixed cost.
+  part on hand, its own shelf first. The part flies there (one period from the
+  own shelf, up to ten across the world; locations carry the code of their
+  nearest airport), is installed, and the failed unit travels back to Amsterdam
+  for repair. If no stock point has a part, one is borrowed.
 - **Repair.** Six repair servers; a repair takes ten weeks on average. A repaired
   part is Amsterdam stock again, so the pool is closed.
 - **Orders.** A stock point that ships its part orders a replacement from
@@ -29,8 +29,9 @@ down until a serviceable part is installed.
 - **The decision.** Whenever Amsterdam has a part on hand and orders are open,
   it chooses which order to fill, or holds the part until the next repair
   completes or the next order opens.
-- **Cost.** One per period (four hours) for every system that is down, plus
-  the borrowing cost. The objective is the average cost per period.
+- **Cost.** Downtime costs 10K per hour: 40K per period (four hours) for every
+  system that is down. A borrowed part costs 1.6M. The objective is the average
+  cost per period.
 
 Travel and repair times are geometric: every period, a travelling part arrives
 and a busy server finishes with a fixed probability. That is not realistic; it

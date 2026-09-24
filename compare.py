@@ -39,7 +39,8 @@ def main() -> None:
     comparer = dynaplex.PolicyComparer(
         mdp, number_of_trajectories=args.trajectories, warmup_time=args.warmup,
         horizon=args.horizon, seed=0, checks=False)
-    print(f"cost per period (4 hours), {args.trajectories} runs of {args.horizon} periods each:\n")
+    print(f"cost per period (4 hours; downtime 10K per hour, a loan 1.6M), "
+          f"{args.trajectories} runs of {args.horizon} periods each:\n")
     print(comparer.compare(policies(mdp)))
 
 

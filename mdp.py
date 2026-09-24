@@ -37,7 +37,8 @@ Time. One period is a few hours (`network.py` says how many). Every period:
      part on hand, the organisation borrows one elsewhere: a LOAN, at `loan_cost`,
      which does not touch our pool.
   4. Cost. `downtime_cost` per period for every system that is down, waiting
-     for its part.
+     for its part. In the tutorial's story downtime costs 10K per hour, so 40K
+     per four-hour period, and a loan 1.6M (`network.py` sets both).
 
 Base stock. Regional stock point k has a fixed base-stock level: whenever it
 ships a part to a customer it orders one from AMS, and records the period of
@@ -146,7 +147,7 @@ class SparePartsMDP:
     def __init__(self, n_stock_points: int, mean_travel_time: np.ndarray,
                  demand_prob: list[float], base_stock: list[int],
                  repair_mean: float, repair_servers: int,
-                 downtime_cost: float = 1.0, loan_cost: float = 40.0):
+                 downtime_cost: float = 40_000.0, loan_cost: float = 1_600_000.0):
         # some validations:
         n_locations = len(demand_prob)
         if mean_travel_time.shape != (n_locations, n_locations):

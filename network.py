@@ -5,7 +5,8 @@ every script uses.
 This file is ordinary Python (strings, dictionaries, anything goes). The model
 in `mdp.py` only ever sees the numbers computed here: a matrix of mean travel
 times and a demand probability per location. The network is invented; the
-cities are real so that the map is recognizable.
+cities are real so that the map is recognizable. Parts travel by air freight,
+which is why every location carries the code of its nearest airport.
 """
 from __future__ import annotations
 
@@ -105,14 +106,17 @@ def default_mdp(
     repair_servers: int = 6,
     regional_base_stock: int = 1,
     ams_stock: int = 1,
-    loan_cost: float = 40.0,
+    downtime_cost_per_hour: float = 10_000.0,
+    loan_cost: float = 1_600_000.0,     # about a week of downtime
     handling_hours: float = 3.0,
     speed_kmh: float = 450.0,
     max_travel_periods: int = 10,
 ) -> SparePartsMDP:
     """The tutorial's configuration. Every number is an argument: change how
     fast-moving the part is (`demands_per_week`), how good the repair shop is,
-    or how many parts the pool owns, and see what the policies make of it."""
+    or how many parts the pool owns, and see what the policies make of it.
+    Money has no currency here: a system that is down costs 10K per hour, a
+    borrowed part 1.6M."""
     periods_per_day = 24 // HOURS_PER_PERIOD
     demand_prob = demands_per_week / (7 * periods_per_day)
     total_weight = sum(loc.demand_weight for loc in LOCATIONS)
@@ -123,5 +127,6 @@ def default_mdp(
         base_stock=[ams_stock] + [regional_base_stock] * (len(STOCK_POINTS) - 1),
         repair_mean=repair_mean_days * periods_per_day,
         repair_servers=repair_servers,
+        downtime_cost=downtime_cost_per_hour * HOURS_PER_PERIOD,
         loan_cost=loan_cost,
     )

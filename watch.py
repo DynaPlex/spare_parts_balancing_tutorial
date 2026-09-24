@@ -134,7 +134,7 @@ def draw(ax, run: Run, policy_name: str) -> None:
     day = state.period / PERIODS_PER_DAY
     per_period = cost / state.period if state.period else 0.0
     ax.set_title(f"{policy_name}   |   day {day:.1f}   |   {state.systems_down} systems down   |   "
-                 f"cost {cost:.0f} ({per_period:.3f} per period)   |   {run.last_decision}",
+                 f"cost {cost / 1e6:.1f}M ({per_period:,.0f} per period)   |   {run.last_decision}",
                  fontsize=9, loc="left")
 
 

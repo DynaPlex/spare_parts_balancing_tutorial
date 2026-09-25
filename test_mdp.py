@@ -61,8 +61,8 @@ def test_demand_is_proportional_to_the_installed_base():
 def test_initial_state_has_the_whole_pool_in_amsterdam_and_every_order_open():
     mdp = default_mdp()
     state = mdp.get_initial_state(new_context(mdp))
-    assert mdp.n_parts == 7 and len(STOCK_POINTS) == 8
-    assert [point.on_hand for point in state.stock_points] == [7] + [0] * 7
+    assert mdp.n_parts == len(STOCK_POINTS) == 8
+    assert [point.on_hand for point in state.stock_points] == [8] + [0] * 7
     assert [len(point.open_orders) for point in state.stock_points] == [0] + [1] * 7
     assert state.orders_open == 7 and all(part.status == PartStatus.STOCK for part in state.parts)
     assert state.category == StateCategory.AWAIT_ACTION       # position the pool
@@ -80,8 +80,7 @@ def test_a_pool_smaller_than_the_number_of_stock_points_leaves_orders_open():
 
 def positioned(mdp, context):
     """The initial state after the pool has been positioned and every part has
-    arrived: part k on the shelf of stock point k, the rest in AMS. (Needs a
-    part per shelf: the tests below use a pool of 8.)"""
+    arrived: part k on the shelf of stock point k, the rest in AMS."""
     state = mdp.get_initial_state(context)
     for k in range(1, mdp.n_stock_points):
         for _ in range(mdp.base_stock[k]):
@@ -180,7 +179,7 @@ def test_failure_at_an_unstocked_site_waits_for_the_nearest_part():
 # ---- holding ----------------------------------------------------------------
 
 def test_holding_postpones_the_question_until_something_changes():
-    mdp = default_mdp(pool_size=8)
+    mdp = default_mdp()
     context = new_context(mdp, seed=5)
     state = with_open_orders(mdp, ["MIA"])
     assert state.category == StateCategory.AWAIT_ACTION
@@ -215,7 +214,7 @@ def with_open_orders(mdp, codes: list[str]):
 
 
 def test_first_come_first_served_fills_the_oldest_order():
-    mdp = default_mdp(pool_size=8)
+    mdp = default_mdp()
     state = with_open_orders(mdp, ["MIA", "CDG"])
     assert FirstComeFirstServed(mdp).get_action(state) == CODE["MIA"]
     state = with_open_orders(mdp, ["CDG", "MIA"])

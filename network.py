@@ -11,8 +11,8 @@ its nearest airport.
 
 To experiment: flip `can_hold_stock` on a location, change `pool_size` in
 `default_mdp()`, or give a site more systems. Nothing else needs to change.
-The pool may be smaller than the number of stock points (it is, by default):
-then some shelf is always waiting for a part.
+The pool may be smaller than the number of stock points: then some shelf is
+always waiting for a part.
 """
 from __future__ import annotations
 
@@ -44,39 +44,39 @@ class Location:
 # Every location where a system can fail. Demand is proportional to the
 # number of systems at a location.
 TABLE = [
-    Location("AMS", "Amsterdam", 52.31, 4.76, 20, can_hold_stock=True),
-    Location("CDG", "Paris", 49.01, 2.55, 15, can_hold_stock=True),
-    Location("MIA", "Miami", 25.79, -80.29, 6, can_hold_stock=True),
-    Location("DXB", "Dubai", 25.25, 55.36, 12, can_hold_stock=True),
-    Location("SIN", "Singapore", 1.36, 103.99, 12, can_hold_stock=True),
+    Location("AMS", "Amsterdam", 52.31, 4.76, 10, can_hold_stock=True),
+    Location("CDG", "Paris", 49.01, 2.55, 9, can_hold_stock=True),
+    Location("MIA", "Miami", 25.79, -80.29, 9, can_hold_stock=True),
+    Location("DXB", "Dubai", 25.25, 55.36, 9, can_hold_stock=True),
+    Location("SIN", "Singapore", 1.36, 103.99, 10, can_hold_stock=True),
     Location("KUL", "Kuala Lumpur", 2.75, 101.71, 5, can_hold_stock=True),
-    Location("GRU", "Sao Paulo", -23.43, -46.47, 4, can_hold_stock=True),
-    Location("PVG", "Shanghai", 31.14, 121.81, 10, can_hold_stock=True),
-    Location("JFK", "New York", 40.64, -73.78, 15),
-    Location("LAX", "Los Angeles", 33.94, -118.41, 8),
-    Location("ORD", "Chicago", 41.98, -87.90, 6),
-    Location("YYZ", "Toronto", 43.68, -79.63, 3),
-    Location("MEX", "Mexico City", 19.44, -99.07, 2),
+    Location("GRU", "Sao Paulo", -23.43, -46.47, 5, can_hold_stock=True),
+    Location("PVG", "Shanghai", 31.14, 121.81, 12, can_hold_stock=True),
+    Location("JFK", "New York", 40.64, -73.78, 18),
+    Location("LAX", "Los Angeles", 33.94, -118.41, 12),
+    Location("ORD", "Chicago", 41.98, -87.90, 9),
+    Location("YYZ", "Toronto", 43.68, -79.63, 4),
+    Location("MEX", "Mexico City", 19.44, -99.07, 4),
     Location("BOG", "Bogota", 4.70, -74.15, 2),
-    Location("LIM", "Lima", -12.02, -77.11, 1),
-    Location("EZE", "Buenos Aires", -34.82, -58.54, 2),
-    Location("LHR", "London", 51.47, -0.45, 15),
-    Location("FRA", "Frankfurt", 50.04, 8.56, 8),
+    Location("LIM", "Lima", -12.02, -77.11, 2),
+    Location("EZE", "Buenos Aires", -34.82, -58.54, 3),
+    Location("LHR", "London", 51.47, -0.45, 12),
+    Location("FRA", "Frankfurt", 50.04, 8.56, 6),
     Location("MAD", "Madrid", 40.49, -3.57, 3),
-    Location("IST", "Istanbul", 41.26, 28.74, 5),
+    Location("IST", "Istanbul", 41.26, 28.74, 4),
     Location("CAI", "Cairo", 30.12, 31.41, 2),
-    Location("LOS", "Lagos", 6.58, 3.32, 1),
+    Location("LOS", "Lagos", 6.58, 3.32, 2),
     Location("NBO", "Nairobi", -1.32, 36.93, 1),
-    Location("JNB", "Johannesburg", -26.14, 28.25, 1),
+    Location("JNB", "Johannesburg", -26.14, 28.25, 2),
     Location("DEL", "Delhi", 28.56, 77.10, 5),
-    Location("BOM", "Mumbai", 19.09, 72.87, 2),
+    Location("BOM", "Mumbai", 19.09, 72.87, 3),
     Location("BKK", "Bangkok", 13.69, 100.75, 5),
-    Location("CGK", "Jakarta", -6.13, 106.66, 2),
-    Location("HKG", "Hong Kong", 22.31, 113.91, 10),
-    Location("PEK", "Beijing", 40.08, 116.58, 5),
-    Location("NRT", "Tokyo", 35.77, 140.39, 6),
-    Location("ICN", "Seoul", 37.46, 126.44, 3),
-    Location("SYD", "Sydney", -33.95, 151.18, 3),
+    Location("CGK", "Jakarta", -6.13, 106.66, 3),
+    Location("HKG", "Hong Kong", 22.31, 113.91, 8),
+    Location("PEK", "Beijing", 40.08, 116.58, 7),
+    Location("NRT", "Tokyo", 35.77, 140.39, 8),
+    Location("ICN", "Seoul", 37.46, 126.44, 4),
+    Location("SYD", "Sydney", -33.95, 151.18, 2),
 ]
 
 # The model numbers the locations: the repair shop is 0, the other stock points
@@ -120,7 +120,7 @@ def default_mdp(
     demands_per_week: float = 0.5,
     repair_mean_days: float = 70.0,
     repair_servers: int = 6,
-    pool_size: int = 7,
+    pool_size: int = 8,
     downtime_cost_per_hour: float = 10_000.0,
     loan_cost: float = 1_600_000.0,     # about a week of downtime
     handling_hours: float = 3.0,

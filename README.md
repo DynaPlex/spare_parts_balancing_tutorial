@@ -10,17 +10,16 @@ neural network with DCL, and compare policies on cost.
 
 ## The model
 
-A service organisation owns a pool of seven identical, expensive, repairable
+A service organisation owns a pool of eight identical, expensive, repairable
 spare parts. Two hundred systems at 33 sites all over the world contain this
 part, and now and then one fails: about one failure every two weeks, more
 often where there are more systems. A failed system is down until a
 serviceable part is installed.
 
-- **Stock points.** Eight sites can hold stock, at most one part each:
-  Amsterdam, Paris, Miami, Dubai, Singapore, Kuala Lumpur, São Paulo and
-  Shanghai. Amsterdam is also the repair shop. The other 25 sites hold nothing.
-  Seven parts for eight shelves: one shelf is always waiting. The pool starts
-  in Amsterdam, and the first decisions position it. (`network.py` is the
+- **Stock points.** Eight sites can hold stock, one part each: Amsterdam,
+  Paris, Miami, Dubai, Singapore, Kuala Lumpur, São Paulo and Shanghai.
+  Amsterdam is also the repair shop. The other 25 sites hold nothing. The pool
+  starts in Amsterdam, and the first decisions position it. (`network.py` is the
   table: flip `can_hold_stock` on a site, or change the pool size, and every
   script follows.)
 - **Fulfilment.** A failure is served from the nearest stock point that has a

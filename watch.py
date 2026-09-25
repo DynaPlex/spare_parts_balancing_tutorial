@@ -31,9 +31,12 @@ COLOUR = {
 }
 TRAVELLING = (PartStatus.OUTBOUND, PartStatus.TO_CUSTOMER, PartStatus.RETURNING)
 # Label offsets (points) where cities crowd each other; everything else goes up-right.
-LABEL_OFFSET = {"CDG": (-24, -12), "LHR": (-26, 2), "FRA": (6, -10), "KUL": (-26, 4), "SIN": (6, -12),
-                "PVG": (6, 4), "HKG": (6, -10), "BOM": (-26, -10), "DEL": (6, 4)}
-STOCK_LABEL_OFFSET = {"AMS": (8, 14), "CDG": (-90, -14), "KUL": (-115, 4), "SIN": (8, -14)}
+LABEL_OFFSET = {"LHR": (-34, 2), "FRA": (7, -12), "HKG": (7, -12), "BOM": (-34, -12), "DEL": (7, 5),
+                "CGK": (7, -14)}
+STOCK_LABEL_OFFSET = {"AMS": (10, 16), "CDG": (-120, -18), "KUL": (-150, 5), "SIN": (10, -18),
+                      "PVG": (-125, -18)}
+SIZE = dict(site=4, stock_point=9, part=10, cross=14, site_font=9, stock_font=9, status_font=11)
+STACK = 3.2     # degrees between parts stacked at the same place
 
 
 def make_policy(name: str, mdp, context):
@@ -108,24 +111,28 @@ class Picture:
         ax.set_facecolor("#f4f4f8")
         for loc in LOCATIONS:
             if loc.holds_stock:     # a square, named by its stock label below
-                ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=7, markerfacecolor="none")
+                ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=SIZE["stock_point"],
+                        markerfacecolor="none")
             else:
-                ax.plot(loc.lon, loc.lat, "o", color="#b0b0b8", markersize=3)
+                ax.plot(loc.lon, loc.lat, "o", color="#b0b0b8", markersize=SIZE["site"])
                 ax.annotate(loc.code, (loc.lon, loc.lat), textcoords="offset points",
-                            xytext=LABEL_OFFSET.get(loc.code, (4, 4)), fontsize=7, color="#707078")
+                            xytext=LABEL_OFFSET.get(loc.code, (5, 5)), fontsize=SIZE["site_font"],
+                            color="#707078")
 
         # The animated artists, one per thing that changes.
-        self.crosses = ax.plot([], [], "x", color="tab:red", markersize=11, markeredgewidth=2.5,
+        self.crosses = ax.plot([], [], "x", color="tab:red", markersize=SIZE["cross"], markeredgewidth=3,
                                animated=True)[0]
-        self.dots = {colour: ax.plot([], [], "o", color=colour, markersize=7, markeredgecolor="white",
-                                     animated=True)[0] for colour in set(COLOUR.values())}
+        self.dots = {colour: ax.plot([], [], "o", color=colour, markersize=SIZE["part"],
+                                     markeredgecolor="white", animated=True)[0]
+                     for colour in set(COLOUR.values())}
         # The shop's label sits above its marker: the parts in repair stack to the right of it.
         self.labels = [ax.annotate("", (loc.lon, loc.lat), textcoords="offset points",
-                                   xytext=STOCK_LABEL_OFFSET.get(loc.code, (6, -12)), fontsize=7,
+                                   xytext=STOCK_LABEL_OFFSET.get(loc.code, (8, -16)), fontsize=SIZE["stock_font"],
                                    color="#202028", fontweight="bold", animated=True,
                                    va="bottom" if loc.code == REPAIR_SHOP else "baseline")
                        for loc in STOCK_POINTS]
-        self.status = ax.text(0.005, 0.99, "", transform=ax.transAxes, va="top", fontsize=9, animated=True)
+        self.status = ax.text(0.005, 0.99, "", transform=ax.transAxes, va="top", fontsize=SIZE["status_font"],
+                              animated=True)
 
     def artists(self) -> list:
         return [self.crosses, *self.dots.values(), *self.labels, self.status]
@@ -140,8 +147,8 @@ class Picture:
             lon, lat = run.position(index, part)
             n = stacked.get((lon, lat), 0)
             stacked[(lon, lat)] = n + 1
-            xs[COLOUR[part.status]].append(lon + 2.5 * n)
-            ys[COLOUR[part.status]].append(lat + 2.5)
+            xs[COLOUR[part.status]].append(lon + STACK * n)
+            ys[COLOUR[part.status]].append(lat + STACK)
             if part.status == PartStatus.TO_CUSTOMER:
                 site = LOCATIONS[part.dest]
                 cross_x.append(site.lon)

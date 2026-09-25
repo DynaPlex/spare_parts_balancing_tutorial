@@ -92,50 +92,78 @@ class Run:
         return a.lon + fraction * (b.lon - a.lon), a.lat + fraction * (b.lat - a.lat)
 
 
-def draw(ax, run: Run, policy_name: str) -> None:
-    state = run.state
-    ax.clear()
-    ax.set_xlim(-130, 160)
-    ax.set_ylim(-45, 65)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_facecolor("#f4f4f8")
+class Picture:
+    """The map is drawn once. Every frame only moves the parts, the crosses,
+    the stock-point labels and the status line; matplotlib redraws just those
+    over the cached map (blitting), which is what keeps the animation smooth."""
 
-    for loc in LOCATIONS:
-        ax.plot(loc.lon, loc.lat, "o", color="#b0b0b8", markersize=3)
-        ax.annotate(loc.code, (loc.lon, loc.lat), textcoords="offset points",
-                    xytext=LABEL_OFFSET.get(loc.code, (4, 4)), fontsize=7, color="#707078")
-    for k, loc in enumerate(STOCK_POINTS):
-        point = state.stock_points[k]
-        label = f"{loc.code}: {point.on_hand} on hand"
-        if point.inbound:
-            label += f", {point.inbound} coming"
-        if not point.open_orders.is_empty():
-            label += f", {len(point.open_orders)} ordered"
-        if k == AMS:
-            label += f"\nshop: {state.busy_servers} in repair, {state.queued} queued"
-        ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=7, markerfacecolor="none")
-        ax.annotate(label, (loc.lon, loc.lat), textcoords="offset points",
-                    xytext=STOCK_LABEL_OFFSET.get(loc.code, (6, -12)), fontsize=7, color="#202028",
-                    fontweight="bold")
+    def __init__(self, ax, run: Run, policy_name: str):
+        self.run = run
+        self.policy_name = policy_name
+        ax.set_xlim(-130, 160)
+        ax.set_ylim(-45, 72)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_facecolor("#f4f4f8")
+        for loc in LOCATIONS:
+            ax.plot(loc.lon, loc.lat, "o", color="#b0b0b8", markersize=3)
+            ax.annotate(loc.code, (loc.lon, loc.lat), textcoords="offset points",
+                        xytext=LABEL_OFFSET.get(loc.code, (4, 4)), fontsize=7, color="#707078")
+        for loc in STOCK_POINTS:
+            ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=7, markerfacecolor="none")
 
-    stacked: dict[tuple[float, float], int] = {}
-    for index, part in enumerate(state.parts):
-        lon, lat = run.position(index, part)
-        n = stacked.get((lon, lat), 0)
-        stacked[(lon, lat)] = n + 1
-        ax.plot(lon + 2.5 * n, lat + 2.5, "o", color=COLOUR[part.status], markersize=7,
-                markeredgecolor="white")
-        if part.status == PartStatus.TO_CUSTOMER:
-            site = LOCATIONS[part.dest]
-            ax.plot(site.lon, site.lat, "x", color="tab:red", markersize=11, markeredgewidth=2.5)
+        # The animated artists, one per thing that changes.
+        self.crosses = ax.plot([], [], "x", color="tab:red", markersize=11, markeredgewidth=2.5,
+                               animated=True)[0]
+        self.dots = {colour: ax.plot([], [], "o", color=colour, markersize=7, markeredgecolor="white",
+                                     animated=True)[0] for colour in set(COLOUR.values())}
+        self.labels = [ax.annotate("", (loc.lon, loc.lat), textcoords="offset points",
+                                   xytext=STOCK_LABEL_OFFSET.get(loc.code, (6, -12)), fontsize=7,
+                                   color="#202028", fontweight="bold", animated=True)
+                       for loc in STOCK_POINTS]
+        self.status = ax.text(0.005, 0.99, "", transform=ax.transAxes, va="top", fontsize=9, animated=True)
 
-    cost = run.context.cumulative_cost
-    day = state.period / PERIODS_PER_DAY
-    per_period = cost / state.period if state.period else 0.0
-    ax.set_title(f"{policy_name}   |   day {day:.1f}   |   {state.systems_down} systems down   |   "
-                 f"cost {cost / 1e6:.1f}M ({per_period:,.0f} per period)   |   {run.last_decision}",
-                 fontsize=9, loc="left")
+    def artists(self) -> list:
+        return [self.crosses, *self.dots.values(), *self.labels, self.status]
+
+    def update(self) -> list:
+        run, state = self.run, self.run.state
+        xs: dict[str, list[float]] = {colour: [] for colour in self.dots}
+        ys: dict[str, list[float]] = {colour: [] for colour in self.dots}
+        cross_x, cross_y = [], []
+        stacked: dict[tuple[float, float], int] = {}
+        for index, part in enumerate(state.parts):
+            lon, lat = run.position(index, part)
+            n = stacked.get((lon, lat), 0)
+            stacked[(lon, lat)] = n + 1
+            xs[COLOUR[part.status]].append(lon + 2.5 * n)
+            ys[COLOUR[part.status]].append(lat + 2.5)
+            if part.status == PartStatus.TO_CUSTOMER:
+                site = LOCATIONS[part.dest]
+                cross_x.append(site.lon)
+                cross_y.append(site.lat)
+        for colour, dots in self.dots.items():
+            dots.set_data(xs[colour], ys[colour])
+        self.crosses.set_data(cross_x, cross_y)
+
+        for k, (loc, label) in enumerate(zip(STOCK_POINTS, self.labels)):
+            point = state.stock_points[k]
+            text = f"{loc.code}: {point.on_hand} on hand"
+            if point.inbound:
+                text += f", {point.inbound} coming"
+            if not point.open_orders.is_empty():
+                text += f", {len(point.open_orders)} ordered"
+            if k == AMS:
+                text += f"\nshop: {state.busy_servers} in repair, {state.queued} queued"
+            label.set_text(text)
+
+        cost = run.context.cumulative_cost
+        day = state.period / PERIODS_PER_DAY
+        per_period = cost / state.period if state.period else 0.0
+        self.status.set_text(f"{self.policy_name}   |   day {day:.1f}   |   {state.systems_down} systems down"
+                             f"   |   cost {cost / 1e6:.1f}M ({per_period:,.0f} per period)"
+                             f"   |   {run.last_decision}")
+        return self.artists()
 
 
 def main() -> None:
@@ -148,14 +176,15 @@ def main() -> None:
 
     run = Run(default_mdp(), args.policy, args.seed)
     fig, ax = plt.subplots(figsize=(13, 6.5))
-    fig.subplots_adjust(left=0.01, right=0.99, top=0.94, bottom=0.01)
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
+    picture = Picture(ax, run, args.policy)
 
     def frame(_):
         run.step()
-        draw(ax, run, args.policy)
+        return picture.update()
 
-    animation = FuncAnimation(fig, frame, frames=args.periods, interval=1000 / args.fps, repeat=False,
-                              cache_frame_data=False)
+    animation = FuncAnimation(fig, frame, init_func=picture.update, frames=args.periods,
+                              interval=1000 / args.fps, repeat=False, blit=True, cache_frame_data=False)
     plt.show()
     del animation
 

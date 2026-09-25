@@ -46,7 +46,9 @@ the order. Hence, always,
 
     on_hand + inbound + len(open_orders) == base_stock        (k >= 1)
 
-AMS has whatever is not elsewhere.
+AMS has no level of its own: it holds whatever is not elsewhere. The pool
+(`pool_size` parts) may be smaller than the sum of the base-stock levels;
+then some orders stay open until a repaired part is sent their way.
 
 The decision is the ALLOCATION of AMS stock to those orders. It comes up when
 AMS has a part on hand and at least one order is open. Action k >= 1 sends a
@@ -132,7 +134,7 @@ class SparePartsMDP:
     mean_travel: ConstArray2D[np.float64]   # [from, to]: mean travel time in periods, at least 1
     travel_prob: ConstArray2D[np.float64]   # [from, to]: per-period arrival probability
     demand_prob: ConstList[float]           # per location, per period
-    base_stock: ConstList[int]              # [0] is the initial AMS stock
+    base_stock: ConstList[int]              # per stock point; [0] (AMS) is 0
     repair_servers: int
     repair_prob: float                      # per busy server, per period: chance the repair is done
     downtime_cost: float
@@ -145,7 +147,7 @@ class SparePartsMDP:
     horizon_type: HorizonType
 
     def __init__(self, n_stock_points: int, mean_travel_time: np.ndarray,
-                 demand_prob: list[float], base_stock: list[int],
+                 demand_prob: list[float], pool_size: int, base_stock: list[int],
                  repair_mean: float, repair_servers: int,
                  downtime_cost: float = 40_000.0, loan_cost: float = 1_600_000.0):
         # some validations:
@@ -156,6 +158,10 @@ class SparePartsMDP:
             raise ValueError("a shipment takes at least one period, also from the site's own shelf")
         if len(base_stock) != n_stock_points or min(base_stock) < 0:
             raise ValueError("base_stock needs one non-negative entry per stock point")
+        if base_stock[AMS] != 0:
+            raise ValueError("base_stock[0] must be 0: AMS holds whatever is not elsewhere")
+        if pool_size < 1:
+            raise ValueError("the pool needs at least one part")
         if repair_mean < 1.0:
             raise ValueError("a repair takes at least one period on average")
         total_demand_prob = sum(demand_prob)
@@ -171,7 +177,7 @@ class SparePartsMDP:
 
         self.n_stock_points = n_stock_points
         self.n_locations = n_locations
-        self.n_parts = sum(base_stock)
+        self.n_parts = pool_size
         self.mean_travel = mean_travel_time.astype(np.float64)
         self.travel_prob = 1.0 / mean_travel_time
         self.demand_prob = list(demand_prob)
@@ -218,7 +224,8 @@ class SparePartsMDP:
 
     def get_initial_state(self, context: TrajectoryContext) -> State:
         """The whole pool on the shelf in AMS and every regional stock point
-        waiting for its base stock: the first decisions position the pool."""
+        waiting for its base stock: the first decisions position the pool.
+        (A pool smaller than the levels leaves some of those orders open.)"""
         parts: list[Part] = []
         for _ in range(self.n_parts):
             parts.append(Part(status=PartStatus.STOCK, origin=AMS, dest=AMS))

@@ -1,6 +1,7 @@
-"""Readable checks of the model: the map, the initial state, the accounting
-identity, fulfilment from the nearest shelf, holding, and the textbook policy
-on hand-built situations. Run with `python -m pytest`."""
+"""Readable checks of the model: the map, the numbering of the locations, the
+initial state, the accounting identity, fulfilment from the nearest shelf,
+holding, and the textbook policy on hand-built situations. Run with
+`python -m pytest`."""
 import numpy as np
 import pytest
 
@@ -9,7 +10,7 @@ from dynaplex.modelling import StateCategory, new_context
 
 from featurizer import SparePartsFeaturizer
 from mdp import AMS, FirstComeFirstServed, PartStatus, SparePartsMDP
-from network import LOCATIONS, STOCK_POINTS, default_mdp, mean_travel_periods
+from network import LOCATIONS, REPAIR_SHOP, STOCK_POINTS, TOTAL_SYSTEMS, default_mdp, mean_travel_periods
 
 CODE = {loc.code: i for i, loc in enumerate(LOCATIONS)}
 
@@ -39,6 +40,22 @@ def test_travel_times_are_whole_periods_between_one_and_ten():
     assert m[CODE["SIN"], CODE["KUL"]] == 1       # neighbours
 
 
+def test_the_repair_shop_is_location_zero_and_the_stock_points_come_first():
+    assert LOCATIONS[AMS].code == REPAIR_SHOP and LOCATIONS[AMS].holds_stock
+    n = len(STOCK_POINTS)
+    assert all(loc.holds_stock for loc in LOCATIONS[:n])
+    assert not any(loc.holds_stock for loc in LOCATIONS[n:])
+    assert len(LOCATIONS) == len({loc.code for loc in LOCATIONS})     # codes are unique
+
+
+def test_demand_is_proportional_to_the_installed_base():
+    mdp = default_mdp(demands_per_week=0.5)
+    per_period = 0.5 / (7 * 6)
+    for i, loc in enumerate(LOCATIONS):
+        assert mdp.demand_prob[i] == pytest.approx(per_period * loc.systems / TOTAL_SYSTEMS)
+    assert sum(mdp.demand_prob) == pytest.approx(per_period)
+
+
 # ---- the initial state ------------------------------------------------------
 
 def test_initial_state_has_the_whole_pool_in_amsterdam_and_every_order_open():
@@ -49,6 +66,16 @@ def test_initial_state_has_the_whole_pool_in_amsterdam_and_every_order_open():
     assert [len(point.open_orders) for point in state.stock_points] == [0] + [1] * 7
     assert state.orders_open == 7 and all(part.status == PartStatus.STOCK for part in state.parts)
     assert state.category == StateCategory.AWAIT_ACTION       # position the pool
+
+
+def test_a_pool_smaller_than_the_number_of_stock_points_leaves_orders_open():
+    mdp = default_mdp(pool_size=5)
+    state = mdp.get_initial_state(new_context(mdp))
+    assert mdp.n_parts == 5 and state.stock_points[AMS].on_hand == 5 and state.orders_open == 7
+    fcfs = FirstComeFirstServed(mdp)
+    for state in simulate(mdp, fcfs, periods=2000):
+        assert state.orders_open >= 2                                  # never enough parts for every shelf
+        assert len(state.parts) == 5
 
 
 def positioned(mdp, context):
@@ -103,7 +130,8 @@ def tiny_mdp(demand_at: str, stock_at: list[str]) -> SparePartsMDP:
     return SparePartsMDP(
         n_stock_points=3, mean_travel_time=travel,
         demand_prob=[0.1 if c == demand_at else 0.0 for c in codes],
-        base_stock=[1 if c in stock_at else 0 for c in codes],
+        pool_size=len(stock_at),
+        base_stock=[0] + [1 if c in stock_at else 0 for c in codes[1:]],
         repair_mean=10.0, repair_servers=2)
 
 

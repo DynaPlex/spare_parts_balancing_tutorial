@@ -9,14 +9,17 @@ policies on cost.
 ## The model
 
 A service organisation owns a pool of eight identical, expensive, repairable
-spare parts. Systems all over the world contain this part, and now and then
-one fails: about one failure every two weeks, spread over 33 sites. A failed system is
-down until a serviceable part is installed.
+spare parts. Two hundred systems at 33 sites all over the world contain this
+part, and now and then one fails: about one failure every two weeks, more
+often where there are more systems. A failed system is down until a
+serviceable part is installed.
 
 - **Stock points.** Eight sites hold stock, one part each: Amsterdam, Paris,
   Miami, Dubai, Singapore, Kuala Lumpur, São Paulo and Shanghai. Amsterdam is
   also the repair shop. The other 25 sites hold nothing. The pool starts on the
-  shelf in Amsterdam, and the first decisions position it.
+  shelf in Amsterdam, and the first decisions position it. (`network.py` is
+  the table: flip `holds_stock` on a site, or change the pool size, and every
+  script follows.)
 - **Fulfilment.** A failure is served from the nearest stock point that has a
   part on hand, its own shelf first. The part flies there (one period from the
   own shelf, up to ten across the world; locations carry the code of their
@@ -58,7 +61,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | File | What it is |
 |---|---|
 | `mdp.py` | **The model**: parts, stock points, the repair shop, one period of time, the allocation decision, and the textbook policy. Start here. |
-| `network.py` | The map (invented network, real cities), travel times, and `default_mdp()`, the configuration every script uses. Ordinary Python: change any number. |
+| `network.py` | The map: one table of sites (invented network, real cities) with the installed base and which sites hold stock, travel times, and `default_mdp()`, the configuration every script uses. Ordinary Python: change any number, flip a flag. |
 | `featurizer.py` | What the neural network sees: the numbers written from a state. |
 | `test_mdp.py` | Readable checks of the model, on hand-built situations. |
 | `watch.py` | Animated map of any policy running the network. |

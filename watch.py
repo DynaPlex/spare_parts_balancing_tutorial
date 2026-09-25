@@ -159,11 +159,16 @@ class Picture:
 
         for k, (loc, label) in enumerate(zip(STOCK_POINTS, self.labels)):
             point = state.stock_points[k]
-            text = f"{loc.code}: {point.on_hand} on hand"
+            parts = []
+            if point.on_hand:
+                parts.append(f"{point.on_hand} on hand")
             if point.inbound:
-                text += f", {point.inbound} coming"
-            if not point.open_orders.is_empty():
-                text += f", {len(point.open_orders)} ordered"
+                parts.append(f"{point.inbound} coming")
+            if not parts and not point.open_orders.is_empty():
+                # An empty shelf is waiting for Amsterdam to decide; the oldest order says since when.
+                days = (state.period - point.open_orders[0]) / PERIODS_PER_DAY
+                parts.append(f"empty for {days:.0f} days")
+            text = f"{loc.code}: " + (", ".join(parts) if parts else "empty")
             if k == AMS:
                 text += f"\nshop: {state.busy_servers} in repair, {state.queued} queued"
             label.set_text(text)

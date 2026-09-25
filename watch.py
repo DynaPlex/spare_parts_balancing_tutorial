@@ -1,8 +1,9 @@
 """Watch a policy run the network: a map with the parts moving, the systems
-that are down, and the shop repairing, one frame per period.
+that are down, and the shop repairing, one frame per day (six periods).
 
     python watch.py                        # the textbook rule
     python watch.py --policy trained       # after train.py
+    python watch.py --periods-per-frame 1  # every period: see the parts move leg by leg
     python watch.py --fps 20 --periods 20000
 
 The model runs in plain Python here (no compilation): the same mdp.py, called
@@ -175,7 +176,10 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--periods", type=int, default=10000, help="periods to show (1667 days)")
     parser.add_argument("--fps", type=float, default=10.0)
+    parser.add_argument("--periods-per-frame", type=int, default=PERIODS_PER_DAY,
+                        help="periods advanced per frame (default 6 = a day; 1 shows every period)")
     args = parser.parse_args()
+    periods_per_frame = max(1, args.periods_per_frame)
 
     run = Run(default_mdp(), args.policy, args.seed)
     fig, ax = plt.subplots(figsize=(13, 6.5))
@@ -183,10 +187,11 @@ def main() -> None:
     picture = Picture(ax, run, args.policy)
 
     def frame(_):
-        run.step()
+        for _ in range(periods_per_frame):
+            run.step()
         return picture.update()
 
-    animation = FuncAnimation(fig, frame, init_func=picture.update, frames=args.periods,
+    animation = FuncAnimation(fig, frame, init_func=picture.update, frames=args.periods // periods_per_frame,
                               interval=1000 / args.fps, repeat=False, blit=True, cache_frame_data=False)
     plt.show()
     del animation

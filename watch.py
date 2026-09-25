@@ -20,7 +20,7 @@ from matplotlib.animation import FuncAnimation
 from dynaplex.modelling import StateCategory, new_context
 
 from mdp import AMS, FirstComeFirstServed, PartStatus
-from network import HOURS_PER_PERIOD, LOCATIONS, STOCK_POINTS, default_mdp
+from network import HOURS_PER_PERIOD, LOCATIONS, REPAIR_SHOP, STOCK_POINTS, default_mdp
 
 PERIODS_PER_DAY = 24 // HOURS_PER_PERIOD
 COLOUR = {
@@ -32,7 +32,7 @@ TRAVELLING = (PartStatus.OUTBOUND, PartStatus.TO_CUSTOMER, PartStatus.RETURNING)
 # Label offsets (points) where cities crowd each other; everything else goes up-right.
 LABEL_OFFSET = {"CDG": (-24, -12), "LHR": (-26, 2), "FRA": (6, -10), "KUL": (-26, 4), "SIN": (6, -12),
                 "PVG": (6, 4), "HKG": (6, -10), "BOM": (-26, -10), "DEL": (6, 4)}
-STOCK_LABEL_OFFSET = {"AMS": (10, 6), "CDG": (-90, -14), "KUL": (-115, 4), "SIN": (8, -14)}
+STOCK_LABEL_OFFSET = {"AMS": (8, 14), "CDG": (-90, -14), "KUL": (-115, 4), "SIN": (8, -14)}
 
 
 def make_policy(name: str, mdp, context):
@@ -106,20 +106,23 @@ class Picture:
         ax.set_yticks([])
         ax.set_facecolor("#f4f4f8")
         for loc in LOCATIONS:
-            ax.plot(loc.lon, loc.lat, "o", color="#b0b0b8", markersize=3)
-            ax.annotate(loc.code, (loc.lon, loc.lat), textcoords="offset points",
-                        xytext=LABEL_OFFSET.get(loc.code, (4, 4)), fontsize=7, color="#707078")
-        for loc in STOCK_POINTS:
-            ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=7, markerfacecolor="none")
+            if loc.holds_stock:     # a square, named by its stock label below
+                ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=7, markerfacecolor="none")
+            else:
+                ax.plot(loc.lon, loc.lat, "o", color="#b0b0b8", markersize=3)
+                ax.annotate(loc.code, (loc.lon, loc.lat), textcoords="offset points",
+                            xytext=LABEL_OFFSET.get(loc.code, (4, 4)), fontsize=7, color="#707078")
 
         # The animated artists, one per thing that changes.
         self.crosses = ax.plot([], [], "x", color="tab:red", markersize=11, markeredgewidth=2.5,
                                animated=True)[0]
         self.dots = {colour: ax.plot([], [], "o", color=colour, markersize=7, markeredgecolor="white",
                                      animated=True)[0] for colour in set(COLOUR.values())}
+        # The shop's label sits above its marker: the parts in repair stack to the right of it.
         self.labels = [ax.annotate("", (loc.lon, loc.lat), textcoords="offset points",
                                    xytext=STOCK_LABEL_OFFSET.get(loc.code, (6, -12)), fontsize=7,
-                                   color="#202028", fontweight="bold", animated=True)
+                                   color="#202028", fontweight="bold", animated=True,
+                                   va="bottom" if loc.code == REPAIR_SHOP else "baseline")
                        for loc in STOCK_POINTS]
         self.status = ax.text(0.005, 0.99, "", transform=ax.transAxes, va="top", fontsize=9, animated=True)
 

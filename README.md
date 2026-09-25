@@ -1,10 +1,12 @@
 # Spare parts balancing
 
 A [DynaPlex](https://dynaplex.github.io/DynaPlex/) example, written for a
-hands-on tutorial on deep reinforcement learning (DRL). The whole model is
-plain Python in one file, a textbook policy sits next to it, and the scripts
-let you watch a policy run, train a neural network with DCL, and compare
-policies on cost.
+hands-on tutorial on simulation models, policies, and deep reinforcement
+learning (DRL). The model is not company-specific, but it has characteristics
+that match real-world challenges: try to understand the business context as
+well as the code. The whole model is plain Python in one file, a textbook
+policy sits next to it, and the scripts let you watch a policy run, train a
+neural network with DCL, and compare policies on cost.
 
 ## The model
 

@@ -9,8 +9,10 @@ network is invented; the cities are real so that the map is recognizable.
 Parts travel by air freight, which is why every location carries the code of
 its nearest airport.
 
-To experiment: flip `holds_stock` on a location, change `pool_size` in
+To experiment: flip `can_hold_stock` on a location, change `pool_size` in
 `default_mdp()`, or give a site more systems. Nothing else needs to change.
+The pool may be smaller than the number of stock points (it is, by default):
+then some shelf is always waiting for a part.
 """
 from __future__ import annotations
 
@@ -32,22 +34,24 @@ class Location:
     lat: float
     lon: float
     systems: int            # installed base: how many systems here contain the part
-    holds_stock: bool = False
+    # A location that can hold stock is a stock point: it keeps a part on its
+    # shelf when it has one, and orders a replacement from the repair shop
+    # whenever it ships one. A location that cannot is served from the nearest
+    # stock point that has a part. The shop itself must be able to hold stock.
+    can_hold_stock: bool = False
 
 
-# Every location where a system can fail. A location that holds stock keeps
-# one part on its shelf, ordering a replacement from the repair shop whenever
-# it ships one; the others are served from the nearest shelf that has a part.
-# Demand is proportional to the number of systems at a location.
+# Every location where a system can fail. Demand is proportional to the
+# number of systems at a location.
 TABLE = [
-    Location("AMS", "Amsterdam", 52.31, 4.76, 20, holds_stock=True),
-    Location("CDG", "Paris", 49.01, 2.55, 15, holds_stock=True),
-    Location("MIA", "Miami", 25.79, -80.29, 6, holds_stock=True),
-    Location("DXB", "Dubai", 25.25, 55.36, 12, holds_stock=True),
-    Location("SIN", "Singapore", 1.36, 103.99, 12, holds_stock=True),
-    Location("KUL", "Kuala Lumpur", 2.75, 101.71, 5, holds_stock=True),
-    Location("GRU", "Sao Paulo", -23.43, -46.47, 4, holds_stock=True),
-    Location("PVG", "Shanghai", 31.14, 121.81, 10, holds_stock=True),
+    Location("AMS", "Amsterdam", 52.31, 4.76, 20, can_hold_stock=True),
+    Location("CDG", "Paris", 49.01, 2.55, 15, can_hold_stock=True),
+    Location("MIA", "Miami", 25.79, -80.29, 6, can_hold_stock=True),
+    Location("DXB", "Dubai", 25.25, 55.36, 12, can_hold_stock=True),
+    Location("SIN", "Singapore", 1.36, 103.99, 12, can_hold_stock=True),
+    Location("KUL", "Kuala Lumpur", 2.75, 101.71, 5, can_hold_stock=True),
+    Location("GRU", "Sao Paulo", -23.43, -46.47, 4, can_hold_stock=True),
+    Location("PVG", "Shanghai", 31.14, 121.81, 10, can_hold_stock=True),
     Location("JFK", "New York", 40.64, -73.78, 15),
     Location("LAX", "Los Angeles", 33.94, -118.41, 8),
     Location("ORD", "Chicago", 41.98, -87.90, 6),
@@ -77,11 +81,11 @@ TABLE = [
 
 # The model numbers the locations: the repair shop is 0, the other stock points
 # come next, then the sites without stock. The table above can be in any order.
-if not any(loc.code == REPAIR_SHOP and loc.holds_stock for loc in TABLE):
+if not any(loc.code == REPAIR_SHOP and loc.can_hold_stock for loc in TABLE):
     raise ValueError(f"the repair shop {REPAIR_SHOP} must be in the table and hold stock: "
                      "repaired parts land on its shelf")
-LOCATIONS = sorted(TABLE, key=lambda loc: (loc.code != REPAIR_SHOP, not loc.holds_stock))
-STOCK_POINTS = [loc for loc in LOCATIONS if loc.holds_stock]
+LOCATIONS = sorted(TABLE, key=lambda loc: (loc.code != REPAIR_SHOP, not loc.can_hold_stock))
+STOCK_POINTS = [loc for loc in LOCATIONS if loc.can_hold_stock]
 TOTAL_SYSTEMS = sum(loc.systems for loc in LOCATIONS)
 
 
@@ -116,7 +120,7 @@ def default_mdp(
     demands_per_week: float = 0.5,
     repair_mean_days: float = 70.0,
     repair_servers: int = 6,
-    pool_size: int = 8,
+    pool_size: int = 7,
     downtime_cost_per_hour: float = 10_000.0,
     loan_cost: float = 1_600_000.0,     # about a week of downtime
     handling_hours: float = 3.0,

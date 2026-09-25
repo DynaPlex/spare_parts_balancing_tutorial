@@ -110,7 +110,7 @@ class Picture:
         ax.set_yticks([])
         ax.set_facecolor("#f4f4f8")
         for loc in LOCATIONS:
-            if loc.holds_stock:     # a square, named by its stock label below
+            if loc.can_hold_stock:     # a square, named by its stock label below
                 ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=SIZE["stock_point"],
                         markerfacecolor="none")
             else:

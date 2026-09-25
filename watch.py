@@ -34,7 +34,8 @@ TRAVELLING = (PartStatus.OUTBOUND, PartStatus.TO_CUSTOMER, PartStatus.RETURNING)
 LABEL_OFFSET = {"LHR": (-34, 2), "FRA": (7, -12), "HKG": (7, -12), "BOM": (-34, -12), "DEL": (7, 5),
                 "CGK": (7, -14)}
 STOCK_LABEL_OFFSET = {"AMS": (10, 16), "CDG": (-120, -18), "KUL": (-150, 5), "SIN": (10, -18),
-                      "PVG": (-125, -18)}
+                      "PVG": (-10, -18)}
+RIGHT_ALIGNED = {"PVG"}     # the text ends at the offset instead of starting there (near the map's edge)
 SIZE = dict(site=4, stock_point=9, part=10, cross=14, site_font=9, stock_font=9, status_font=11)
 STACK = 3.2     # degrees between parts stacked at the same place
 
@@ -129,7 +130,8 @@ class Picture:
         self.labels = [ax.annotate("", (loc.lon, loc.lat), textcoords="offset points",
                                    xytext=STOCK_LABEL_OFFSET.get(loc.code, (8, -16)), fontsize=SIZE["stock_font"],
                                    color="#202028", fontweight="bold", animated=True,
-                                   va="bottom" if loc.code == REPAIR_SHOP else "baseline")
+                                   va="bottom" if loc.code == REPAIR_SHOP else "baseline",
+                                   ha="right" if loc.code in RIGHT_ALIGNED else "left")
                        for loc in STOCK_POINTS]
         self.status = ax.text(0.005, 0.99, "", transform=ax.transAxes, va="top", fontsize=SIZE["status_font"],
                               animated=True)

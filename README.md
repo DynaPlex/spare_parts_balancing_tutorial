@@ -2,11 +2,20 @@
 
 A [DynaPlex](https://dynaplex.github.io/DynaPlex/) example, written for a
 hands-on tutorial on simulation models, policies, and deep reinforcement
-learning (DRL). The model is not company-specific, but it has characteristics
-that match real-world challenges: try to understand the business context as
-well as the code. The whole model is plain Python in one file, a textbook
-policy sits next to it, and the scripts let you watch a policy run, train a
-neural network with DCL, and compare policies on cost.
+learning (DRL). In DRL, the computer learns good policies for the decisions
+in a dynamic simulation model. In this tutorial, the model represents the
+control of a spare parts network in response to dynamic, unpredictable
+demand. The model is not company-specific, but it has characteristics that
+match real-world challenges: try to understand the business context as well
+as the code.
+
+The whole model is plain Python in one file, a textbook policy sits next to
+it, and the scripts let you watch a policy run, train a neural network with
+DCL, and compare policies on cost. The model is still relatively basic, and
+several real-world elements are not incorporated. After working through this
+code, you may adapt it to include elements such as prognostics, lateral
+transshipments, multiple repair shops, or multiple components. Alternatively,
+you can start a whole new model that represents your own business.
 
 ## The model
 

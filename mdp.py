@@ -350,3 +350,17 @@ class FirstComeFirstServed:
                 best = k
                 oldest = point.open_orders[0]
         return best
+
+
+# @policy
+@const_dataclass(slots=True)
+class MyPolicy:
+    """Yours to write. `python compare.py --mine` puts it next to the other
+    policies, and `python watch.py --policy mine` shows it on the map."""
+
+    mdp: SparePartsMDP
+
+    def get_action(self, state: State) -> int:
+        # Return 0 to hold the part, or k >= 1 to send it to stock point k
+        # (only a stock point with an open order is allowed).
+        dynaplex.fail("MyPolicy is not written yet: fill in get_action in mdp.py")

@@ -2,6 +2,7 @@
 the same failures and the same repair times, so the differences are paired.
 
     python compare.py                  # the textbook rule, random, and the trained policy
+    python compare.py --mine           # also MyPolicy, once you have written it in mdp.py
     python compare.py --trajectories 2048
 
 A trained policy (see train.py) is included automatically when agents/trained
@@ -12,17 +13,19 @@ import os
 
 import dynaplex
 
-from mdp import FirstComeFirstServed
+from mdp import FirstComeFirstServed, MyPolicy
 from network import default_mdp
 
 TRAINED_AGENT = os.path.join("agents", "trained")
 
 
-def policies(mdp) -> dict:
+def policies(mdp, mine: bool = False) -> dict:
     result = {
         "FirstComeFirstServed": FirstComeFirstServed(mdp),
         "Random": dynaplex.RandomPolicy(mdp),
     }
+    if mine:
+        result["MyPolicy"] = MyPolicy(mdp)
     if os.path.isdir(TRAINED_AGENT):
         result["Trained"] = dynaplex.NNAgent.load(TRAINED_AGENT)
     return result
@@ -30,6 +33,7 @@ def policies(mdp) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--mine", action="store_true", help="include MyPolicy from mdp.py")
     parser.add_argument("--trajectories", type=int, default=1024)
     parser.add_argument("--warmup", type=int, default=5000, help="periods before costs count")
     parser.add_argument("--horizon", type=int, default=30000, help="periods that count (5000 days)")
@@ -41,7 +45,7 @@ def main() -> None:
         horizon=args.horizon, seed=0, checks=False)
     print(f"cost per period (4 hours; downtime 10K per hour, a loan 1.6M), "
           f"{args.trajectories} runs of {args.horizon} periods each:\n")
-    print(comparer.compare(policies(mdp)))
+    print(comparer.compare(policies(mdp, args.mine)))
 
 
 if __name__ == "__main__":

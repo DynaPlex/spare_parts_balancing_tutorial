@@ -60,7 +60,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest          # the model's own checks (a few seconds)
 .venv/bin/python watch.py           # a window: watch the textbook rule run
 .venv/bin/python compare.py         # the policies on cost, paired
-.venv/bin/python train.py           # train a policy with DCL (about a minute), then compare
+.venv/bin/python train.py           # train a policy with DCL (a minute or two), then compare
 .venv/bin/python watch.py --policy trained
 ```
 
@@ -71,11 +71,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 | File | What it is |
 |---|---|
-| `mdp.py` | **The model**: parts, stock points, the repair shop, one period of time, the allocation decision, and the textbook policy. Start here. |
+| `mdp.py` | **The model**: parts, stock points, the repair shop, one period of time, the allocation decision, the textbook policy, and an empty `MyPolicy` for your own rule. Start here. |
 | `network.py` | The map: one table of sites (invented network, real cities) with the installed base and which sites hold stock, travel times, and `default_mdp()`, the configuration every script uses. Ordinary Python: change any number, flip a flag. |
 | `featurizer.py` | What the neural network sees: the numbers written from a state. |
 | `test_mdp.py` | Readable checks of the model, on hand-built situations. |
-| `watch.py` | Animated map of any policy running the network. |
+| `watch.py` | Animated map of any policy running the network; `--step` to click through it day by day. |
 | `world_map.json` | The countries `watch.py` draws behind the network: outlines from [Natural Earth](https://www.naturalearthdata.com) (1:110m, public domain). |
 | `compare.py` | All policies on the same random failures and repair times, with paired differences. |
 | `train.py` | One generation of Deep Controlled Learning from the textbook rule; saves `agents/trained`. |
@@ -84,3 +84,45 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 - **FirstComeFirstServed**: fill the oldest open order. The textbook rule.
 - **Trained**: whatever `train.py` learns from the textbook rule's rollouts.
+- **MyPolicy**: yours to write, at the bottom of `mdp.py`. Until you do, it
+  stops with "not written yet". `python compare.py --mine` puts it next to the
+  others on cost, and `python watch.py --policy mine` shows it on the map.
+
+## Watching step by step
+
+`python watch.py --step` starts paused and lets you click through the days:
+
+| Key | What it does |
+|---|---|
+| right arrow | one frame forward (a day; with `--periods-per-frame 1`, four hours) |
+| space | play / pause |
+
+The keys work in every run of `watch.py`, also without `--step`. The line at the
+top shows the last decision Amsterdam took: that, step by step, is how to find
+out what a trained policy does.
+
+## After you change the model: delete `dynaplex_runs/`
+
+`train.py` keeps its samples and trained networks in `dynaplex_runs/`, so that an
+interrupted run can resume. DynaPlex 1.14 recognises an earlier run by its
+settings and numbers, **not by the code**. If you change `mdp.py`,
+`featurizer.py` or the policy that training starts from, and train again with
+the same settings, it prints `agent_gen1 exists — skipping`, finishes in a
+second, and gives you the policy that was trained on the old model.
+
+So after any such change, delete the folder and train again:
+
+```bash
+rm -rf dynaplex_runs            # Windows: rmdir /s /q dynaplex_runs
+.venv/bin/python train.py
+```
+
+Changing a number in `network.py` (the pool size, a cost, which sites hold
+stock) is recognised, and needs no deleting.
+
+## Questions, problems, ideas
+
+Post an issue or a question at
+[github.com/DynaPlex/DynaPlex/issues](https://github.com/DynaPlex/DynaPlex/issues).
+The documentation, with tutorials and more examples, is at
+[dynaplex.github.io/DynaPlex](https://dynaplex.github.io/DynaPlex/).

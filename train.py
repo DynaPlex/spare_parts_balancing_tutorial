@@ -3,7 +3,7 @@ generation: from every state a hand-written base policy would visit, try each
 allowed action, roll the base policy out from there, and let the network learn
 which action led to the lowest cost. Then compare.
 
-    python train.py                     # from the textbook rule; about a minute on a laptop
+    python train.py                     # from the textbook rule; a minute or two on a laptop
     python train.py --samples 16000     # more samples, better (and slower)
 
 Two things make the labels usable here: paired rollouts (the model draws its
@@ -14,6 +14,12 @@ coin flips).
 The trained policy is written to agents/trained, where compare.py and
 watch.py --policy trained pick it up. Runs resume: the samples and agents land
 in dynaplex_runs/, and rerunning with the same settings reuses them.
+
+IMPORTANT, after you change the model (mdp.py), the features (featurizer.py)
+or the policy that training starts from: delete the folder dynaplex_runs/
+before you train again. DynaPlex 1.14 recognises an earlier run by its
+settings and numbers, not by the code, so it would say "agent_gen1 exists —
+skipping" and hand you the policy trained on the OLD model.
 """
 import argparse
 import os
@@ -38,6 +44,10 @@ def main() -> None:
                         help="soft_ce = near-ties get near-equal targets; ce = the winning action only")
     parser.add_argument("--out", default=os.path.join("agents", "trained"))
     args = parser.parse_args()
+
+    if os.path.isdir("dynaplex_runs"):
+        print("note: dynaplex_runs/ exists, and an earlier run with the same settings is reused.\n"
+              "      Changed mdp.py or featurizer.py since then? Delete dynaplex_runs/ and train again.\n")
 
     mdp = default_mdp()
     base = FirstComeFirstServed(mdp)

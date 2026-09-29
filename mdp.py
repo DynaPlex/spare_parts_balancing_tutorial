@@ -105,8 +105,8 @@ class Part:
 
 @dataclass(slots=True)
 class StockPoint:
-    on_hand: int
-    inbound: int            # parts OUTBOUND to this stock point
+    on_hand: int            # number of parts on the shelf
+    inbound: int            # number of parts OUTBOUND to this stock point
     open_orders: FifoQueue  # period in which each unfilled order was placed, oldest first
 
 
@@ -114,10 +114,10 @@ class StockPoint:
 class State:
     parts: list[Part]
     stock_points: list[StockPoint]
-    queued: int                 # REPAIR_QUEUE parts: failed units waiting for a server
-    busy_servers: int
-    systems_down: int           # TO_CUSTOMER parts: systems waiting for one
-    orders_open: int            # unfilled orders, over all stock points
+    queued: int                 # number of REPAIR_QUEUE parts: failed units waiting for a server
+    busy_servers: int           # number of IN_REPAIR parts: repairs in progress
+    systems_down: int           # number of TO_CUSTOMER parts: systems waiting for one
+    orders_open: int            # number of unfilled orders, over all stock points
     period: int
     holding: bool               # the last decision was to hold; cleared when something changes
     category: StateCategory

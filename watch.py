@@ -1,5 +1,6 @@
 """Watch a policy run the network: a map with the parts moving, the systems
 that are down, and the shop repairing, one frame per day (six periods).
+The world behind it is `world_map.json`.
 
     python watch.py                        # the textbook rule
     python watch.py --policy trained       # after train.py
@@ -13,10 +14,12 @@ Colours: green = serviceable, blue = on its way to a system that is down (the
 red cross), red = failed and returning, orange = in the repair shop.
 """
 import argparse
+import json
 import os
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from matplotlib.collections import PolyCollection
 
 from dynaplex.modelling import StateCategory, new_context
 
@@ -38,6 +41,18 @@ STOCK_LABEL_OFFSET = {"AMS": (10, 16), "CDG": (-120, -18), "KUL": (-150, 5), "SI
 RIGHT_ALIGNED = {"PVG"}     # the text ends at the offset instead of starting there (near the map's edge)
 SIZE = dict(site=4, stock_point=9, part=10, cross=14, site_font=9, stock_font=9, status_font=11)
 STACK = 3.2     # degrees between parts stacked at the same place
+SEA, LAND, BORDER = "#eef3f8", "#d4d6d2", "#ffffff"
+WORLD_MAP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "world_map.json")
+
+
+def draw_world(ax) -> None:
+    """The countries and the large lakes behind everything else: outlines in
+    (lon, lat) from Natural Earth (public domain), drawn once."""
+    ax.set_facecolor(SEA)
+    with open(WORLD_MAP) as file:
+        world = json.load(file)
+    ax.add_collection(PolyCollection(world["land"], facecolors=LAND, edgecolors=BORDER, linewidths=0.4, zorder=0))
+    ax.add_collection(PolyCollection(world["lakes"], facecolors=SEA, edgecolors="none", zorder=0))
 
 
 def make_policy(name: str, mdp, context):
@@ -109,16 +124,16 @@ class Picture:
         ax.set_ylim(-45, 72)
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_facecolor("#f4f4f8")
+        draw_world(ax)
         for loc in LOCATIONS:
             if loc.can_hold_stock:     # a square, named by its stock label below
                 ax.plot(loc.lon, loc.lat, "s", color="#404048", markersize=SIZE["stock_point"],
                         markerfacecolor="none")
             else:
-                ax.plot(loc.lon, loc.lat, "o", color="#b0b0b8", markersize=SIZE["site"])
+                ax.plot(loc.lon, loc.lat, "o", color="#707078", markersize=SIZE["site"])
                 ax.annotate(loc.code, (loc.lon, loc.lat), textcoords="offset points",
                             xytext=LABEL_OFFSET.get(loc.code, (5, 5)), fontsize=SIZE["site_font"],
-                            color="#707078")
+                            color="#505058")
 
         # The animated artists, one per thing that changes.
         self.crosses = ax.plot([], [], "x", color="tab:red", markersize=SIZE["cross"], markeredgewidth=3,

@@ -76,6 +76,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `featurizer.py` | What the neural network sees: the numbers written from a state. |
 | `test_mdp.py` | Readable checks of the model, on hand-built situations. |
 | `watch.py` | Animated map of any policy running the network. |
+| `world_map.json` | The countries `watch.py` draws behind the network: outlines from [Natural Earth](https://www.naturalearthdata.com) (1:110m, public domain). |
 | `compare.py` | All policies on the same random failures and repair times, with paired differences. |
 | `train.py` | One generation of Deep Controlled Learning from the textbook rule; saves `agents/trained`. |
 

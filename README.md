@@ -61,7 +61,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python watch.py           # a window: watch the textbook rule run
 .venv/bin/python compare.py         # the policies on cost, paired
 .venv/bin/python train.py           # train a policy with DCL (a minute or two), then compare
-.venv/bin/python watch.py --policy trained
+.venv/bin/python watch.py --policy trained           # watch the trained policy run
+.venv/bin/python watch.py --policy trained --step    # the same, one day per key press (right arrow)
 ```
 
 (Windows: `python -m venv .venv`, then `.venv\Scripts\pip` and
@@ -95,9 +96,16 @@ moves by itself. Press the **right arrow** (or the space bar) for the next day,
 hold it down to run on, and close the window to stop. With
 `--periods-per-frame 1` every press is one four-hour period.
 
-The line at the top shows the last decision Amsterdam took: that, step by
-step, is how to find out what a trained policy does
-(`python watch.py --policy trained --step`).
+`--step` works with every policy:
+
+```bash
+.venv/bin/python watch.py --step                     # the textbook rule
+.venv/bin/python watch.py --step --policy trained    # the trained neural network (after train.py)
+.venv/bin/python watch.py --step --policy mine       # your own MyPolicy
+```
+
+The line at the top shows the last decision Amsterdam took. Following the
+trained policy step by step is how to find out what it does.
 
 ## After you change the model: delete `dynaplex_runs/`
 

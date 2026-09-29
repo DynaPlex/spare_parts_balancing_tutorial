@@ -90,16 +90,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 ## Watching step by step
 
-`python watch.py --step` starts paused and lets you click through the days:
+`python watch.py --step` shows the same map without the animation: nothing
+moves by itself. Press the **right arrow** (or the space bar) for the next day,
+hold it down to run on, and close the window to stop. With
+`--periods-per-frame 1` every press is one four-hour period.
 
-| Key | What it does |
-|---|---|
-| right arrow | one frame forward (a day; with `--periods-per-frame 1`, four hours) |
-| space | play / pause |
-
-The keys work in every run of `watch.py`, also without `--step`. The line at the
-top shows the last decision Amsterdam took: that, step by step, is how to find
-out what a trained policy does.
+The line at the top shows the last decision Amsterdam took: that, step by
+step, is how to find out what a trained policy does
+(`python watch.py --policy trained --step`).
 
 ## After you change the model: delete `dynaplex_runs/`
 

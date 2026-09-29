@@ -5,14 +5,15 @@ The world behind it is `world_map.json`.
     python watch.py                        # the textbook rule
     python watch.py --policy trained       # after train.py
     python watch.py --policy mine          # MyPolicy, once you have written it in mdp.py
-    python watch.py --step                 # starts paused: click through it day by day
+    python watch.py --step                 # no animation: every key press shows the next day
     python watch.py --periods-per-frame 1  # every period: see the parts move leg by leg
     python watch.py --fps 20 --periods 20000
 
 The model runs in plain Python here (no compilation): the same mdp.py, called
 directly, so you can put a print() or a breakpoint anywhere in it and watch.
 
-Keys, in the window: right arrow = one frame forward, space = play / pause.
+With --step nothing moves by itself: press the right arrow (or the space bar)
+for the next frame, hold it down to run on, close the window to stop.
 
 Colours: green = serviceable, blue = on its way to a system that is down (the
 red cross), red = failed and returning, orange = in the repair shop.
@@ -121,12 +122,13 @@ class Run:
 class Picture:
     """The map is drawn once. Every frame only moves the parts, the crosses,
     the stock-point labels and the status line; matplotlib redraws just those
-    over the cached map (blitting), which is what keeps the animation smooth."""
+    over the cached map (blitting), which is what keeps the animation smooth.
+    With `animated=False` (step by step) the whole picture is redrawn instead."""
 
-    def __init__(self, ax, run: Run, policy_name: str):
+    def __init__(self, ax, run: Run, policy_name: str, animated: bool = True):
         self.run = run
         self.policy_name = policy_name
-        self.hint = ""          # shown after the status line while the animation is paused
+        self.hint = ""          # a second status line, for the keys of --step
         ax.set_xlim(-130, 160)
         ax.set_ylim(-45, 72)
         ax.set_xticks([])
@@ -144,19 +146,19 @@ class Picture:
 
         # The animated artists, one per thing that changes.
         self.crosses = ax.plot([], [], "x", color="tab:red", markersize=SIZE["cross"], markeredgewidth=3,
-                               animated=True)[0]
+                               animated=animated)[0]
         self.dots = {colour: ax.plot([], [], "o", color=colour, markersize=SIZE["part"],
-                                     markeredgecolor="white", animated=True)[0]
+                                     markeredgecolor="white", animated=animated)[0]
                      for colour in set(COLOUR.values())}
         # The shop's label sits above its marker: the parts in repair stack to the right of it.
         self.labels = [ax.annotate("", (loc.lon, loc.lat), textcoords="offset points",
                                    xytext=STOCK_LABEL_OFFSET.get(loc.code, (8, -16)), fontsize=SIZE["stock_font"],
-                                   color="#202028", fontweight="bold", animated=True,
+                                   color="#202028", fontweight="bold", animated=animated,
                                    va="bottom" if loc.code == REPAIR_SHOP else "baseline",
                                    ha="right" if loc.code in RIGHT_ALIGNED else "left")
                        for loc in STOCK_POINTS]
         self.status = ax.text(0.005, 0.99, "", transform=ax.transAxes, va="top", fontsize=SIZE["status_font"],
-                              animated=True)
+                              animated=animated)
 
     def artists(self) -> list:
         return [self.crosses, *self.dots.values(), *self.labels, self.status]
@@ -206,11 +208,30 @@ class Picture:
         return self.artists()
 
 
+def step_by_step(fig, ax, run: Run, policy_name: str, periods_per_frame: int) -> None:
+    """The same picture without the animation: nothing runs by itself, and
+    every press of the right arrow (or the space bar) advances one frame and
+    redraws the map."""
+    picture = Picture(ax, run, policy_name, animated=False)
+    picture.hint = "\nright arrow or space: next frame (hold it down to run on)"
+    picture.update()
+
+    def on_key(event) -> None:
+        if event.key in ("right", " "):
+            for _ in range(periods_per_frame):
+                run.step()
+            picture.update()
+            fig.canvas.draw_idle()
+
+    fig.canvas.mpl_connect("key_press_event", on_key)
+    plt.show()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--policy", choices=["fcfs", "random", "trained", "mine"], default="fcfs")
     parser.add_argument("--step", action="store_true",
-                        help="start paused; right arrow = one frame forward, space = play / pause")
+                        help="no animation: the right arrow (or space) shows the next frame")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--periods", type=int, default=10000, help="periods to show (1667 days)")
     parser.add_argument("--fps", type=float, default=10.0)
@@ -222,44 +243,18 @@ def main() -> None:
     run = Run(default_mdp(), args.policy, args.seed)
     fig, ax = plt.subplots(figsize=(13, 6.5))
     fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
+    if args.step:
+        step_by_step(fig, ax, run, args.policy, periods_per_frame)
+        return
     picture = Picture(ax, run, args.policy)
 
-    PAUSED_HINT = "\npaused   |   right arrow: one frame forward   |   space: play"
-    playing = not args.step     # False while paused
-    one_more = False            # paused, and the right arrow asked for one frame
-    ticking = True              # the animation's timer runs (it starts by itself with the window)
-    picture.hint = "" if playing else PAUSED_HINT
-
     def frame(_):
-        nonlocal one_more, ticking
-        if playing or one_more:
-            for _ in range(periods_per_frame):
-                run.step()
-        if not playing:         # paused: this was the one frame asked for, or none at all
-            one_more = False
-            animation.pause()
-            ticking = False
+        for _ in range(periods_per_frame):
+            run.step()
         return picture.update()
-
-    def on_key(event) -> None:
-        nonlocal playing, one_more, ticking
-        if event.key == " ":
-            playing = not playing
-        elif event.key == "right":
-            playing = False
-            one_more = True
-        else:
-            return
-        picture.hint = "" if playing else PAUSED_HINT
-        # The next frame plays on, or shows one frame and pauses again. Start the timer only
-        # when it stands still: starting a running timer a second time crashes on macOS.
-        if not ticking:
-            animation.resume()
-            ticking = True
 
     animation = FuncAnimation(fig, frame, init_func=picture.update, frames=args.periods // periods_per_frame,
                               interval=1000 / args.fps, repeat=False, blit=True, cache_frame_data=False)
-    fig.canvas.mpl_connect("key_press_event", on_key)
     plt.show()
     del animation
 

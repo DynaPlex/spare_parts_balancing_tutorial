@@ -227,20 +227,22 @@ def main() -> None:
     PAUSED_HINT = "\npaused   |   right arrow: one frame forward   |   space: play"
     playing = not args.step     # False while paused
     one_more = False            # paused, and the right arrow asked for one frame
+    ticking = True              # the animation's timer runs (it starts by itself with the window)
     picture.hint = "" if playing else PAUSED_HINT
 
     def frame(_):
-        nonlocal one_more
+        nonlocal one_more, ticking
         if playing or one_more:
             for _ in range(periods_per_frame):
                 run.step()
         if not playing:         # paused: this was the one frame asked for, or none at all
             one_more = False
             animation.pause()
+            ticking = False
         return picture.update()
 
     def on_key(event) -> None:
-        nonlocal playing, one_more
+        nonlocal playing, one_more, ticking
         if event.key == " ":
             playing = not playing
         elif event.key == "right":
@@ -249,7 +251,11 @@ def main() -> None:
         else:
             return
         picture.hint = "" if playing else PAUSED_HINT
-        animation.resume()      # the next frame plays on, or shows one frame and pauses again
+        # The next frame plays on, or shows one frame and pauses again. Start the timer only
+        # when it stands still: starting a running timer a second time crashes on macOS.
+        if not ticking:
+            animation.resume()
+            ticking = True
 
     animation = FuncAnimation(fig, frame, init_func=picture.update, frames=args.periods // periods_per_frame,
                               interval=1000 / args.fps, repeat=False, blit=True, cache_frame_data=False)
